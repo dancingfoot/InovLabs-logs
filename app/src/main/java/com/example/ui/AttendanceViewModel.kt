@@ -408,9 +408,33 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun addManualClassEvent(title: String, durationMinutes: Int, dateMillis: Long? = null) {
+    fun addManualClassEvent(
+        schoolName: String,
+        sumario: String,
+        durationMinutes: Int,
+        targetDateMillis: Long,
+        customDateStr: String = "",
+        docente: String = "",
+        obs: String = "",
+        markAsAttended: Boolean = true,
+        markAsNotAttended: Boolean = false
+    ) {
         viewModelScope.launch {
-            val targetDate = dateMillis ?: _uiState.value.selectedDateMillis
+            if (docente.isNotBlank() && docente != _uiState.value.docenteName) {
+                attendanceRepo.setDocenteName(docente)
+                _uiState.value = _uiState.value.copy(docenteName = docente)
+            }
+
+            val targetDate = if (customDateStr.isNotBlank()) {
+                try {
+                    SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(customDateStr)?.time ?: targetDateMillis
+                } catch (e: Exception) {
+                    targetDateMillis
+                }
+            } else {
+                targetDateMillis
+            }
+
             val calId = _uiState.value.selectedCalendarId ?: 0L
             val isTargetToday = isSameDay(targetDate, System.currentTimeMillis())
             val nowCal = java.util.Calendar.getInstance()
@@ -430,10 +454,16 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             val startMillis = targetCal.timeInMillis
             val endMillis = startMillis + (durationMinutes * 60 * 1000L)
 
+            val fullTitle = if (sumario.isNotBlank()) {
+                "${schoolName.trim()} - ${sumario.trim()}"
+            } else {
+                schoolName.trim()
+            }
+
             var createdId = -1L
             if (_uiState.value.hasCalendarPermission) {
                 createdId = calendarRepo.createCalendarEvent(
-                    title = title,
+                    title = fullTitle,
                     startHour = targetCal.get(java.util.Calendar.HOUR_OF_DAY),
                     startMinute = targetCal.get(java.util.Calendar.MINUTE),
                     durationMinutes = durationMinutes,
@@ -443,25 +473,70 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             }
 
             val eventId = if (createdId > 0) createdId else System.currentTimeMillis()
+            val initialStatus = when {
+                markAsAttended -> AttendanceStatus.ATTENDED
+                markAsNotAttended -> AttendanceStatus.NOT_ATTENDED
+                else -> AttendanceStatus.PENDING
+            }
+
             val newEvent = ClassEvent(
                 id = eventId,
                 calendarId = calId,
-                title = title,
-                schoolName = CalendarRepository.extractSchoolName(title),
+                title = fullTitle,
+                schoolName = schoolName.trim(),
                 startTimeMillis = startMillis,
                 endTimeMillis = endMillis,
                 location = "Sala de Aula",
-                attendanceStatus = AttendanceStatus.PENDING
+                attendanceStatus = initialStatus
             )
 
             val dateFormatted = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(targetDate))
-            _uiState.value = _uiState.value.copy(
-                todayEvents = listOf(newEvent) + _uiState.value.todayEvents.filter { it.id != newEvent.id },
-                isAddEventOpen = false,
-                snackbarMessage = "Aula '$title' agendada para $dateFormatted!"
-            )
+
+            if (markAsAttended) {
+                val record = attendanceRepo.logAttendance(
+                    eventId = eventId,
+                    professorEscola = schoolName.trim(),
+                    sumario = sumario.trim().ifBlank { "Robótica Educativa" },
+                    minutos = durationMinutes,
+                    obs = obs.trim(),
+                    sheetName = schoolName.trim(),
+                    eventTitle = fullTitle,
+                    customDate = dateFormatted,
+                    eventDateMillis = startMillis,
+                    allowDuplicate = false
+                )
+                _uiState.value = _uiState.value.copy(
+                    todayEvents = listOf(newEvent.copy(loggedRecordId = record.id)) + _uiState.value.todayEvents.filter { it.id != newEvent.id },
+                    isAddEventOpen = false,
+                    snackbarMessage = "✓ Aula adicionada e presença registada na aba '${schoolName.trim()}'!"
+                )
+            } else if (markAsNotAttended) {
+                _uiState.value = _uiState.value.copy(
+                    todayEvents = listOf(newEvent) + _uiState.value.todayEvents.filter { it.id != newEvent.id },
+                    isAddEventOpen = false,
+                    snackbarMessage = "Aula '${schoolName.trim()}' adicionada como não assistida."
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    todayEvents = listOf(newEvent) + _uiState.value.todayEvents.filter { it.id != newEvent.id },
+                    isAddEventOpen = false,
+                    snackbarMessage = "Aula '$fullTitle' agendada para $dateFormatted!"
+                )
+            }
             loadTodayEvents()
         }
+    }
+
+    fun addManualClassEvent(title: String, durationMinutes: Int, dateMillis: Long? = null) {
+        val school = CalendarRepository.extractSchoolName(title).ifBlank { title }
+        val sumario = CalendarRepository.extractClassSummary(title).ifBlank { "Robótica" }
+        addManualClassEvent(
+            schoolName = school,
+            sumario = sumario,
+            durationMinutes = durationMinutes,
+            targetDateMillis = dateMillis ?: _uiState.value.selectedDateMillis,
+            markAsAttended = false
+        )
     }
 
     fun updateSettings(docenteName: String, webhookUrl: String, sheetViewUrl: String) {

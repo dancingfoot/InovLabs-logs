@@ -3,6 +3,17 @@
 ## [1.0.1] - 2026-09-13
 
 ### Destaques & Correções Principais
+- **Nova Janela de Adicionar Aula / Presença**:
+  - A janela para adicionar aula passa a ter a mesma estrutura, estilo e opções da janela detalhada ("Editar Aula / Presença"):
+    - Campo de **Escola / Aba destino no Sheets** (com ícone e placeholder).
+    - Campo de **Sumário da Aula** (ex: Robótica Educativa).
+    - Linha com **Data (DD/MM/AAAA)** e **Minutos**, acompanhada por **Atalhos rápidos** (45m, 60m, 90m, 120m).
+    - Campo de **Docente InovLabs** e campo de **Observações (Turma, ocorrências...)**.
+    - Sem a secção de duplicados, mantendo o formulário focado e limpo.
+    - Botões de ação completos: **Guardar e Marcar Assistida** (com sincronização imediata no Google Sheets), **Não Assistida**, **Agendar** (pendente) e **Cancelar**.
+- **Resolução do Erro KSP NullPointerException (Issue #2763)**:
+  - Corrigida a exceção `Exception in thread "AWT-EventQueue-0" java.lang.NullPointerException: Cannot invoke "ksp.com.intellij.openapi.application.Application.getService(java.lang.Class)"` ao atualizar o plugin KSP para a versão estável `2.3.6` e desativar o processador codegen não utilizado.
+  - Atualizado o teste unitário `ExampleRobolectricTest` para validar a nova designação `InovLabs_logs`.
 - **Identidade Visual & Renomeação InovLabs_logs**:
   - Nome do projeto, metadados, títulos e recursos atualizados para **InovLabs_logs**.
   - Logótipo oficial da InovLabs (blocos ciano 'i' e verde lima 'N') implementado como ícone adaptativo da aplicação e integrado no cabeçalho do ecrã principal.

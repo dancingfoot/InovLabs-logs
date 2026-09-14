@@ -371,9 +371,20 @@ fun AttendanceScreen(
         AddEventDialog(
             selectedDateFormatted = uiState.currentDateFormatted,
             targetDateMillis = uiState.selectedDateMillis,
+            docenteName = uiState.docenteName,
             onDismiss = { viewModel.setAddEventOpen(false) },
-            onAddEvent = { title, durationMin, dateMillis ->
-                viewModel.addManualClassEvent(title, durationMin, dateMillis)
+            onAddClass = { schoolName, sumario, durationMin, customDate, docente, obs, markAsAttended, markAsNotAttended ->
+                viewModel.addManualClassEvent(
+                    schoolName = schoolName,
+                    sumario = sumario,
+                    durationMinutes = durationMin,
+                    targetDateMillis = uiState.selectedDateMillis,
+                    customDateStr = customDate,
+                    docente = docente,
+                    obs = obs,
+                    markAsAttended = markAsAttended,
+                    markAsNotAttended = markAsNotAttended
+                )
             }
         )
     }
