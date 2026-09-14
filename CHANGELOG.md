@@ -3,6 +3,9 @@
 ## [1.0.1] - 2026-09-13
 
 ### Destaques & Correções Principais
+- **Publicação Automática de APK em GitHub Releases**:
+  - Adicionado fluxo automatizado do GitHub Actions (`.github/workflows/release.yml`) que compila e anexa automaticamente o ficheiro APK (`InovLabs_logs.apk` e `InovLabsATTENDANCE.apk`) aos releases do GitHub sempre que uma nova tag (`v*`) for criada ou um release for publicado.
+  - Atualizado o APK compilado mais recente diretamente na pasta do repositório (`apk/InovLabs_logs.apk` e `apk/InovLabsATTENDANCE.apk`).
 - **Nova Janela de Adicionar Aula / Presença**:
   - A janela para adicionar aula passa a ter a mesma estrutura, estilo e opções da janela detalhada ("Editar Aula / Presença"):
     - Campo de **Escola / Aba destino no Sheets** (com ícone e placeholder).
