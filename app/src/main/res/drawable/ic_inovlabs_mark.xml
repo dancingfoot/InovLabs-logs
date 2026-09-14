@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="32dp"
+    android:viewportWidth="64"
+    android:viewportHeight="32">
+    
+    <!-- Left Cyan Square 'i' -->
+    <path
+        android:fillColor="#00A4E4"
+        android:pathData="M 0,0 H 31 V 31 H 0 Z" />
+    <!-- Dot of 'i' -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 13,4.5 H 18 V 9.5 H 13 Z" />
+    <!-- Stem of 'i' -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 13,12 H 18 V 26.5 H 13 Z" />
+
+    <!-- Right Lime Green Square 'N' -->
+    <path
+        android:fillColor="#8DC63F"
+        android:pathData="M 33,0 H 64 V 31 H 33 Z" />
+    <!-- Letter 'N' -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 39,5 H 43.5 L 53.5,20 V 5 H 58 V 26 H 53.5 L 43.5,11 V 26 H 39 Z" />
+</vector>

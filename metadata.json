@@ -1,0 +1,6 @@
+{
+  "name": "InovLabs_logs",
+  "description": "Registo e sincronização de presenças e sumários de aulas InovLabs com o Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

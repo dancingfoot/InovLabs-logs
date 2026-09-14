@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="70dp"
+    android:viewportWidth="120"
+    android:viewportHeight="70">
+    
+    <!-- Left Cyan Square 'i' -->
+    <path
+        android:fillColor="#00A4E4"
+        android:pathData="M 28,6 H 58 V 36 H 28 Z" />
+    <!-- Dot of 'i' -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 40.5,10.5 H 45.5 V 15.5 H 40.5 Z" />
+    <!-- Stem of 'i' -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 40.5,18 H 45.5 V 31.5 H 40.5 Z" />
+
+    <!-- Right Lime Green Square 'N' -->
+    <path
+        android:fillColor="#8DC63F"
+        android:pathData="M 62,6 H 92 V 36 H 62 Z" />
+    <!-- Letter 'N' -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 68,11 H 72.5 L 81.5,25 V 11 H 86 V 31 H 81.5 L 72.5,17 V 31 H 68 Z" />
+
+    <!-- Word 'INOVLABS' below -->
+    <!-- I -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 12,46 H 15 V 62 H 12 Z" />
+    <!-- N -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 21,46 H 23.5 L 30,56.5 V 46 H 32.5 V 62 H 30 L 23.5,51.5 V 62 H 21 Z" />
+    <!-- O -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 38,46 C 42,46 45,49.5 45,54 C 45,58.5 42,62 38,62 C 34,62 31,58.5 31,54 C 31,49.5 34,46 38,46 Z M 38,48.5 C 35.5,48.5 33.5,50.8 33.5,54 C 33.5,57.2 35.5,59.5 38,59.5 C 40.5,59.5 42.5,57.2 42.5,54 C 42.5,50.8 40.5,48.5 38,48.5 Z" />
+    <!-- V -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 49,46 H 51.5 L 56,58.5 L 60.5,46 H 63 L 57.2,62 H 54.8 Z" />
+    <!-- L -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 68,46 H 70.5 V 59.5 H 77 V 62 H 68 Z" />
+    <!-- A -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 84,46 H 86.5 L 92,62 H 89.5 L 88,57.5 H 82.5 L 81,62 H 78.5 Z M 83.3,55 H 87.2 L 85.25,49.5 Z" />
+    <!-- B -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 97,46 H 102 C 104,46 105.5,47.2 105.5,49.2 C 105.5,50.8 104.5,51.8 103.2,52.2 C 105,52.6 106.2,54 106.2,56 C 106.2,58.5 104.2,62 101.5,62 H 97 Z M 99.5,48.5 V 52.5 H 101.5 C 102.8,52.5 103.5,51.8 103.5,50.5 C 103.5,49.2 102.8,48.5 101.5,48.5 Z M 99.5,55 V 59.5 H 102 C 103.2,59.5 104.2,58.8 104.2,57.2 C 104.2,55.8 103.2,55 102,55 Z" />
+    <!-- S -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 116,48.5 L 114.2,50 C 113.2,49 112,48.3 110.5,48.3 C 109.2,48.3 108.5,49 108.5,49.8 C 108.5,50.8 109.5,51.3 111.5,52 C 114.2,53 116.2,54.2 116.2,57 C 116.2,60 113.8,62 110.5,62 C 108.5,62 106.8,61.2 105.5,59.8 L 107.2,58 C 108.2,59.2 109.5,59.8 110.8,59.8 C 112.2,59.8 113.2,59 113.2,57.8 C 113.2,56.6 112,56 110,55.2 C 107.5,54.2 105.8,53 105.8,50.5 C 105.8,48 108,46 110.8,46 C 112.8,46 114.8,47 116,48.5 Z" />
+</vector>
