@@ -14,6 +14,8 @@ import com.example.data.model.CalendarInfo
 import com.example.data.model.ClassEvent
 import com.example.data.repository.AttendanceRepository
 import com.example.data.repository.CalendarRepository
+import com.example.notification.NotificationHelper
+import com.example.notification.NotificationScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -45,7 +47,12 @@ data class AttendanceUiState(
     val currentDateFormatted: String = "",
     val selectedDateMillis: Long = System.currentTimeMillis(),
     val isSelectedDateToday: Boolean = true,
-    val projectHours: Int = 150
+    val projectHours: Int = 150,
+    val isClassEndNotificationEnabled: Boolean = true,
+    val isDailyDigestEnabled: Boolean = false,
+    val dailyDigestHour: Int = 18,
+    val dailyDigestMinute: Int = 0,
+    val hasNotificationPermission: Boolean = false
 )
 
 class AttendanceViewModel(application: Application) : AndroidViewModel(application) {
@@ -53,6 +60,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
     private val calendarRepo = CalendarRepository(application)
     private val db = AppDatabase.getDatabase(application)
     private val attendanceRepo = AttendanceRepository(application, db.attendanceDao())
+    private var pendingPromptEventId: Long? = null
 
     private val _uiState = MutableStateFlow(
         AttendanceUiState(
@@ -63,7 +71,12 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             sheetViewUrl = attendanceRepo.getGoogleSheetViewUrl(),
             isDemoMode = attendanceRepo.isCalendarDemoMode(),
             currentDateFormatted = getFormattedCurrentDate(),
-            projectHours = attendanceRepo.getProjectHours()
+            projectHours = attendanceRepo.getProjectHours(),
+            isClassEndNotificationEnabled = attendanceRepo.isClassEndNotificationEnabled(),
+            isDailyDigestEnabled = attendanceRepo.isDailyDigestEnabled(),
+            dailyDigestHour = attendanceRepo.getDailyDigestHour(),
+            dailyDigestMinute = attendanceRepo.getDailyDigestMinute(),
+            hasNotificationPermission = NotificationHelper.hasNotificationPermission(application)
         )
     )
     val uiState: StateFlow<AttendanceUiState> = _uiState.asStateFlow()
@@ -188,8 +201,17 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
 
+            val pendingId = pendingPromptEventId
+            val eventToPrompt = if (pendingId != null) {
+                mappedEvents.firstOrNull { it.id == pendingId }
+            } else null
+            if (eventToPrompt != null) {
+                pendingPromptEventId = null
+            }
+
             _uiState.value = _uiState.value.copy(
                 todayEvents = mappedEvents,
+                activePromptEvent = eventToPrompt ?: _uiState.value.activePromptEvent,
                 isLoading = false,
                 snackbarMessage = if (showFeedbackToast) {
                     if (mappedEvents.isEmpty()) {
@@ -199,6 +221,17 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                     }
                 } else _uiState.value.snackbarMessage
             )
+
+            if (isSameDay(selectedDate, System.currentTimeMillis())) {
+                NotificationScheduler.syncAllRemindersForToday(
+                    context = getApplication(),
+                    events = mappedEvents,
+                    classEndEnabled = _uiState.value.isClassEndNotificationEnabled,
+                    dailyDigestEnabled = _uiState.value.isDailyDigestEnabled,
+                    digestHour = _uiState.value.dailyDigestHour,
+                    digestMinute = _uiState.value.dailyDigestMinute
+                )
+            }
         }
     }
 
@@ -217,6 +250,9 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             activePromptEvent = null,
             snackbarMessage = "✓ Registada com sucesso na aba '$targetSheet'"
         )
+
+        // Cancel scheduled alarm for this class since it is attended
+        NotificationScheduler.cancelClassReminder(getApplication(), event.id)
 
         // Background persistence and sync to Google Sheets
         viewModelScope.launch {
@@ -248,6 +284,10 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             snackbarMessage = "Registo reposto para pendente e removido da folha."
         )
 
+        if (_uiState.value.isClassEndNotificationEnabled && event.endTimeMillis > System.currentTimeMillis()) {
+            NotificationScheduler.scheduleClassEndReminder(getApplication(), event)
+        }
+
         viewModelScope.launch {
             val record = if (event.loggedRecordId != null) {
                 attendanceRecords.value.firstOrNull { it.id == event.loggedRecordId }
@@ -268,6 +308,73 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
 
     fun dismissAttendancePrompt() {
         _uiState.value = _uiState.value.copy(activePromptEvent = null)
+    }
+
+    fun saveEditedEventLocally(
+        event: ClassEvent,
+        sumario: String,
+        minutos: Int,
+        obs: String,
+        sheetName: String,
+        customDate: String,
+        docente: String
+    ) {
+        val targetSheet = sheetName.ifBlank { event.schoolName.ifBlank { event.title } }
+        val fullTitle = if (sumario.isNotBlank()) "${targetSheet.trim()} - ${sumario.trim()}" else targetSheet.trim()
+        val durationMillis = minutos * 60 * 1000L
+        val endMillis = event.startTimeMillis + durationMillis
+
+        val updated = _uiState.value.todayEvents.map {
+            if (it.id == event.id) it.copy(
+                schoolName = targetSheet,
+                title = fullTitle,
+                endTimeMillis = endMillis
+            ) else it
+        }
+        _uiState.value = _uiState.value.copy(
+            todayEvents = updated,
+            activePromptEvent = null,
+            snackbarMessage = "✓ Alterações guardadas localmente."
+        )
+
+        viewModelScope.launch {
+            if (docente.isNotBlank() && docente != _uiState.value.docenteName) {
+                attendanceRepo.setDocenteName(docente)
+                _uiState.value = _uiState.value.copy(docenteName = docente)
+            }
+
+            if (event.loggedRecordId != null) {
+                val eventDateStr = if (customDate.isNotBlank()) customDate else SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(event.startTimeMillis))
+                val rec = attendanceRepo.saveRecordLocally(
+                    eventId = event.id,
+                    professorEscola = targetSheet,
+                    sumario = sumario.ifBlank { CalendarRepository.extractClassSummary(event.title) },
+                    minutos = minutos,
+                    obs = obs,
+                    sheetName = targetSheet,
+                    eventTitle = fullTitle,
+                    customDate = eventDateStr,
+                    eventDateMillis = event.startTimeMillis
+                )
+                val refreshed = _uiState.value.todayEvents.map {
+                    if (it.id == event.id) it.copy(loggedRecordId = rec.id) else it
+                }
+                _uiState.value = _uiState.value.copy(todayEvents = refreshed)
+            }
+        }
+    }
+
+    fun commitEditedEvent(
+        event: ClassEvent,
+        sumario: String,
+        minutos: Int,
+        obs: String,
+        sheetName: String,
+        customDate: String,
+        docente: String,
+        allowDuplicate: Boolean = false
+    ) {
+        saveEditedEvent(event, sumario, minutos, obs, sheetName, customDate, docente, allowDuplicate)
     }
 
     fun saveEditedEvent(
@@ -298,6 +405,9 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 "✓ Aula guardada na aba '$targetSheet' (sem duplicados)"
             }
         )
+
+        // Cancel reminder alarm since class is logged
+        NotificationScheduler.cancelClassReminder(getApplication(), event.id)
 
         viewModelScope.launch {
             if (docente.isNotBlank() && docente != _uiState.value.docenteName) {
@@ -539,17 +649,60 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
-    fun updateSettings(docenteName: String, webhookUrl: String, sheetViewUrl: String) {
+    fun updateSettings(
+        docenteName: String,
+        webhookUrl: String,
+        sheetViewUrl: String,
+        classEndEnabled: Boolean = _uiState.value.isClassEndNotificationEnabled,
+        dailyDigestEnabled: Boolean = _uiState.value.isDailyDigestEnabled,
+        dailyDigestHour: Int = _uiState.value.dailyDigestHour,
+        dailyDigestMinute: Int = _uiState.value.dailyDigestMinute
+    ) {
         attendanceRepo.setDocenteName(docenteName)
         attendanceRepo.setGoogleSheetWebhookUrl(webhookUrl)
         attendanceRepo.setGoogleSheetViewUrl(sheetViewUrl)
+        attendanceRepo.setClassEndNotificationEnabled(classEndEnabled)
+        attendanceRepo.setDailyDigestEnabled(dailyDigestEnabled)
+        attendanceRepo.setDailyDigestTime(dailyDigestHour, dailyDigestMinute)
+
         _uiState.value = _uiState.value.copy(
             docenteName = docenteName,
             webhookUrl = webhookUrl,
             sheetViewUrl = sheetViewUrl,
+            isClassEndNotificationEnabled = classEndEnabled,
+            isDailyDigestEnabled = dailyDigestEnabled,
+            dailyDigestHour = dailyDigestHour,
+            dailyDigestMinute = dailyDigestMinute,
             isSettingsOpen = false,
-            snackbarMessage = "Definições guardadas com sucesso."
+            snackbarMessage = "Definições e notificações guardadas com sucesso."
         )
+
+        NotificationScheduler.syncAllRemindersForToday(
+            context = getApplication(),
+            events = _uiState.value.todayEvents,
+            classEndEnabled = classEndEnabled,
+            dailyDigestEnabled = dailyDigestEnabled,
+            digestHour = dailyDigestHour,
+            digestMinute = dailyDigestMinute
+        )
+    }
+
+    fun sendTestNotification() {
+        NotificationHelper.showTestNotification(getApplication())
+        _uiState.value = _uiState.value.copy(snackbarMessage = "Notificação de teste enviada!")
+    }
+
+    fun setNotificationPermissionGranted(granted: Boolean) {
+        _uiState.value = _uiState.value.copy(hasNotificationPermission = granted)
+    }
+
+    fun triggerEventPromptById(eventId: Long) {
+        val event = _uiState.value.todayEvents.firstOrNull { it.id == eventId }
+        if (event != null) {
+            showAttendancePrompt(event)
+        } else {
+            pendingPromptEventId = eventId
+        }
     }
 
     fun importCsv(csvContent: String) {

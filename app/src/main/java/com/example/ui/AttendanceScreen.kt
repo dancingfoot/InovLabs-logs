@@ -91,6 +91,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
 import com.example.data.model.AttendanceStatus
 import com.example.data.model.ClassEvent
+import com.example.notification.NotificationHelper
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -120,6 +121,13 @@ fun AttendanceScreen(
         viewModel.setCalendarPermissionGranted(readGranted)
     }
 
+    // Notification Permission launcher (Android 13+)
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        viewModel.setNotificationPermissionGranted(isGranted)
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -129,6 +137,9 @@ fun AttendanceScreen(
                     Manifest.permission.READ_CALENDAR
                 ) == PackageManager.PERMISSION_GRANTED
                 viewModel.setCalendarPermissionGranted(hasPermission)
+                viewModel.setNotificationPermissionGranted(
+                    NotificationHelper.hasNotificationPermission(context)
+                )
                 viewModel.refreshData(showFeedbackToast = false)
             }
         }
@@ -347,10 +358,21 @@ fun AttendanceScreen(
             initialWebhookUrl = uiState.webhookUrl,
             initialSheetViewUrl = uiState.sheetViewUrl,
             isDemoMode = uiState.isDemoMode,
+            initialClassEndEnabled = uiState.isClassEndNotificationEnabled,
+            initialDailyDigestEnabled = uiState.isDailyDigestEnabled,
+            initialDailyDigestHour = uiState.dailyDigestHour,
+            initialDailyDigestMinute = uiState.dailyDigestMinute,
+            hasNotificationPermission = uiState.hasNotificationPermission,
+            onRequestNotificationPermission = {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            },
+            onSendTestNotification = { viewModel.sendTestNotification() },
             onGenerateTestSchedule = { viewModel.generateTestSchedule() },
             onClearTestSchedule = { viewModel.clearTestSchedule() },
-            onSave = { name, webhook, sheetView ->
-                viewModel.updateSettings(name, webhook, sheetView)
+            onSave = { name, webhook, sheetView, classEnd, dailyDigest, hour, min ->
+                viewModel.updateSettings(name, webhook, sheetView, classEnd, dailyDigest, hour, min)
             },
             onDismiss = { viewModel.setSettingsOpen(false) }
         )
@@ -398,8 +420,11 @@ fun AttendanceScreen(
             onDismiss = { viewModel.dismissAttendancePrompt() },
             onNotAttended = { viewModel.markNotAttended(activePrompt) },
             onResetOrDelete = { viewModel.resetAttendanceStatus(activePrompt) },
-            onSaveAndSync = { sumario, mins, obs, sheetName, customDate, docente, allowDuplicate ->
-                viewModel.saveEditedEvent(activePrompt, sumario, mins, obs, sheetName, customDate, docente, allowDuplicate)
+            onSaveLocal = { sumario, mins, obs, sheetName, customDate, docente ->
+                viewModel.saveEditedEventLocally(activePrompt, sumario, mins, obs, sheetName, customDate, docente)
+            },
+            onCommit = { sumario, mins, obs, sheetName, customDate, docente, allowDuplicate ->
+                viewModel.commitEditedEvent(activePrompt, sumario, mins, obs, sheetName, customDate, docente, allowDuplicate)
             }
         )
     }

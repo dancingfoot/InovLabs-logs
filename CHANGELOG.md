@@ -1,5 +1,33 @@
 # Registo de Versões (Changelog)
 
+## [1.0.3] - 2026-10-23
+
+### Destaques & Correções Principais
+- **Sistema Completo de Notificações e Lembretes de Aulas**:
+  - **Avisos no Fim de Cada Aula**: Notificação automática precisa assim que cada aula termina, convidando a preencher o sumário e confirmar presenças de imediato.
+  - **Abertura Direta via Notificação**: Tocar na notificação abre a aplicação e aciona de imediato a janela da aula correspondente.
+  - **Cancelamento Inteligente**: Se uma aula já tiver sido marcada ou guardada antes de terminar, o alarme e a notificação dessa aula são cancelados automaticamente.
+  - **Lembrete Diário Agendado com Horário Personalizado**: Opção para receber um resumo diário à hora escolhida (ex: 17:00, 17:30, 18:00, 18:30, 19:00 ou hora à medida) caso existam aulas pendentes por registar nesse dia.
+  - **Secção nas Definições ("Notificações e Lembretes de Aulas")**:
+    - Indicador de estado da permissão de notificações do Android (`POST_NOTIFICATIONS`).
+    - Botão para ativar/solicitar permissões de notificação no Android.
+    - Botão "Testar Notificação Agora no Telemóvel" para validação imediata de som/vibração/pop-up.
+    - Interruptores independentes para ligar/desligar alertas de fim de aula e lembrete diário.
+  - **Persistência após Reinício**: Registado `BootReceiver` para reprogramar automaticamente os alarmes das aulas do dia caso o telemóvel reinicie.
+- **Incremento de Versão**:
+  - Atualizado para a versão **1.0.3** (Build 4).
+
+## [1.0.2] - 2026-10-22
+
+### Destaques & Correções Principais
+- **Separação das Ações de Edição: Guardar (Local) e Submeter (Commit)**:
+  - Na janela de edição de aula/presença, o botão único anterior foi dividido em dois botões específicos:
+    - **Guardar**: Guarda todas as alterações e detalhes da aula (escola, sumário, data, duração, notas) localmente na aplicação e base de dados Room sem efetuar envio para a folha de cálculo Google Sheets.
+    - **Submeter**: Guarda as alterações e submete/sincroniza a presença diretamente para a respetiva aba no Google Sheets via Webhook.
+  - Adicionado cartão informativo explicativo com a distinção entre as duas operações.
+- **Incremento de Versão**:
+  - Atualizado para a versão **1.0.2** (Build 3).
+
 ## [1.0.1] - 2026-09-13
 
 ### Destaques & Correções Principais

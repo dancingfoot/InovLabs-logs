@@ -133,6 +133,53 @@ class AttendanceRepository(
         }
     }
 
+    suspend fun saveRecordLocally(
+        eventId: Long,
+        professorEscola: String,
+        sumario: String,
+        minutos: Int,
+        obs: String,
+        sheetName: String,
+        eventTitle: String,
+        customDate: String? = null,
+        eventDateMillis: Long = 0L
+    ): AttendanceRecord = withContext(Dispatchers.IO) {
+        val existingRecord = attendanceDao.getRecordByEventId(eventId)
+        val docenteName = getDocenteName()
+        val formattedDate = customDate ?: if (eventDateMillis > 0) {
+            SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(eventDateMillis))
+        } else {
+            SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+        }
+        val targetSheet = sheetName.ifBlank { professorEscola.ifBlank { eventTitle } }
+        val lessonNum = existingRecord?.lessonNumber ?: (
+            (attendanceDao.getMaxLessonNumberForSheet(targetSheet) ?: attendanceDao.getMaxLessonNumber() ?: 0) + 1
+        )
+
+        val record = AttendanceRecord(
+            id = existingRecord?.id ?: 0L,
+            lessonNumber = lessonNum,
+            docenteInovLabs = docenteName,
+            professorEscola = professorEscola,
+            date = formattedDate,
+            sumario = sumario,
+            minutos = minutos,
+            obs = obs,
+            eventId = eventId,
+            eventTitle = eventTitle,
+            sheetName = targetSheet,
+            syncedToGoogleSheets = existingRecord?.syncedToGoogleSheets ?: false
+        )
+
+        if (existingRecord != null) {
+            attendanceDao.updateRecord(record)
+            record
+        } else {
+            val id = attendanceDao.insertRecord(record)
+            record.copy(id = id)
+        }
+    }
+
     suspend fun deleteRecord(record: AttendanceRecord): Boolean = withContext(Dispatchers.IO) {
         val webhookUrl = getGoogleSheetWebhookUrl()
         var sheetDeleted = false
@@ -518,5 +565,37 @@ class AttendanceRepository(
 
     fun setCalendarDemoMode(demo: Boolean) {
         prefs.edit().putBoolean("calendar_demo_mode", demo).apply()
+    }
+
+    // Notification Preferences
+    fun isClassEndNotificationEnabled(): Boolean {
+        return prefs.getBoolean("notify_class_end", true)
+    }
+
+    fun setClassEndNotificationEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("notify_class_end", enabled).apply()
+    }
+
+    fun isDailyDigestEnabled(): Boolean {
+        return prefs.getBoolean("notify_daily_digest", false)
+    }
+
+    fun setDailyDigestEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("notify_daily_digest", enabled).apply()
+    }
+
+    fun getDailyDigestHour(): Int {
+        return prefs.getInt("notify_daily_digest_hour", 18)
+    }
+
+    fun getDailyDigestMinute(): Int {
+        return prefs.getInt("notify_daily_digest_minute", 0)
+    }
+
+    fun setDailyDigestTime(hour: Int, minute: Int) {
+        prefs.edit()
+            .putInt("notify_daily_digest_hour", hour)
+            .putInt("notify_daily_digest_minute", minute)
+            .apply()
     }
 }

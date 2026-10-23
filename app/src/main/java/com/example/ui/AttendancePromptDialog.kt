@@ -65,7 +65,8 @@ fun AttendancePromptDialog(
     onDismiss: () -> Unit,
     onNotAttended: () -> Unit,
     onResetOrDelete: (() -> Unit)? = null,
-    onSaveAndSync: (sumario: String, minutos: Int, obs: String, sheetName: String, customDate: String, docente: String, allowDuplicate: Boolean) -> Unit
+    onSaveLocal: (sumario: String, minutos: Int, obs: String, sheetName: String, customDate: String, docente: String) -> Unit,
+    onCommit: (sumario: String, minutos: Int, obs: String, sheetName: String, customDate: String, docente: String, allowDuplicate: Boolean) -> Unit
 ) {
     val durationMinutes = remember(event) {
         val diff = event.endTimeMillis - event.startTimeMillis
@@ -359,41 +360,99 @@ fun AttendancePromptDialog(
                         }
                     }
                 }
+                // Save vs Commit Info Note
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "Opções de Ação:",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "• Guardar: Salva alterações localmente sem enviar para o Sheets.\n• Submeter: Regista a presença e envia para a folha de cálculo.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    val mins = minutosText.toIntOrNull() ?: durationMinutes
-                    onSaveAndSync(
-                        sumario.ifBlank { event.title },
-                        mins,
-                        obs,
-                        sheetName.ifBlank { event.schoolName.ifBlank { event.title } },
-                        dateText.ifBlank { eventDateStr },
-                        currentDocente,
-                        allowDuplicate
-                    )
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF2E7D32)
-                ),
-                modifier = Modifier.testTag("btn_save_edit_dialog")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = if (event.attendanceStatus == AttendanceStatus.ATTENDED) "Atualizar Presença" else "Guardar e Marcar Assistida",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                )
+                // BUTTON 1: SAVE (LOCAL)
+                OutlinedButton(
+                    onClick = {
+                        val mins = minutosText.toIntOrNull() ?: durationMinutes
+                        onSaveLocal(
+                            sumario.ifBlank { event.title },
+                            mins,
+                            obs,
+                            sheetName.ifBlank { event.schoolName.ifBlank { event.title } },
+                            dateText.ifBlank { eventDateStr },
+                            currentDocente
+                        )
+                    },
+                    modifier = Modifier.testTag("btn_save_edit_dialog")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Guardar",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                }
+
+                // BUTTON 2: COMMIT (SYNC TO GOOGLE SHEETS)
+                Button(
+                    onClick = {
+                        val mins = minutosText.toIntOrNull() ?: durationMinutes
+                        onCommit(
+                            sumario.ifBlank { event.title },
+                            mins,
+                            obs,
+                            sheetName.ifBlank { event.schoolName.ifBlank { event.title } },
+                            dateText.ifBlank { eventDateStr },
+                            currentDocente,
+                            allowDuplicate
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF2E7D32)
+                    ),
+                    modifier = Modifier.testTag("btn_commit_edit_dialog")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Submeter",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
             }
         },
         dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 if (event.attendanceStatus == AttendanceStatus.PENDING) {
                     TextButton(
                         onClick = onNotAttended,
@@ -406,7 +465,7 @@ fun AttendancePromptDialog(
                         )
                     }
                 }
-                OutlinedButton(
+                TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.testTag("btn_cancel_edit_dialog")
                 ) {

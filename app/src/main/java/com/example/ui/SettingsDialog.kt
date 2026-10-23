@@ -3,8 +3,13 @@ package com.example.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,14 +27,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -57,6 +67,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -68,9 +79,24 @@ fun SettingsDialog(
     initialWebhookUrl: String,
     initialSheetViewUrl: String,
     isDemoMode: Boolean,
+    initialClassEndEnabled: Boolean = true,
+    initialDailyDigestEnabled: Boolean = false,
+    initialDailyDigestHour: Int = 18,
+    initialDailyDigestMinute: Int = 0,
+    hasNotificationPermission: Boolean = false,
+    onRequestNotificationPermission: () -> Unit = {},
+    onSendTestNotification: () -> Unit = {},
     onGenerateTestSchedule: () -> Unit,
     onClearTestSchedule: () -> Unit,
-    onSave: (docenteName: String, webhookUrl: String, sheetViewUrl: String) -> Unit,
+    onSave: (
+        docenteName: String,
+        webhookUrl: String,
+        sheetViewUrl: String,
+        classEndEnabled: Boolean,
+        dailyDigestEnabled: Boolean,
+        digestHour: Int,
+        digestMinute: Int
+    ) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -79,6 +105,10 @@ fun SettingsDialog(
     var sheetViewUrl by remember { mutableStateOf(initialSheetViewUrl) }
     var showScriptInstructions by remember { mutableStateOf(true) }
     var showScriptCode by remember { mutableStateOf(false) }
+    var classEndEnabled by remember { mutableStateOf(initialClassEndEnabled) }
+    var dailyDigestEnabled by remember { mutableStateOf(initialDailyDigestEnabled) }
+    var dailyDigestHour by remember { mutableStateOf(initialDailyDigestHour) }
+    var dailyDigestMinute by remember { mutableStateOf(initialDailyDigestMinute) }
 
     val sampleAppsScript = """
 function doPost(e) {
@@ -498,6 +528,250 @@ function doPost(e) {
                         }
                     }
 
+                    // Notificações e Lembretes de Aulas
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Notifications,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "Notificações e Lembretes de Aulas",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+
+                            // Permission status badge & action button
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (hasNotificationPermission) {
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                                } else {
+                                    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (hasNotificationPermission) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                            contentDescription = null,
+                                            tint = if (hasNotificationPermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = if (hasNotificationPermission) {
+                                                "Permissões de notificação do Android ativas"
+                                            } else {
+                                                "Permissão de notificações em falta"
+                                            },
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                            color = if (hasNotificationPermission) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+
+                                    if (!hasNotificationPermission) {
+                                        Button(
+                                            onClick = {
+                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                                    onRequestNotificationPermission()
+                                                } else {
+                                                    try {
+                                                        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                                            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                                        }
+                                                        context.startActivity(intent)
+                                                    } catch (_: Exception) {}
+                                                }
+                                            },
+                                            modifier = Modifier.testTag("btn_request_notification_permission"),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.error
+                                            )
+                                        ) {
+                                            Text("Ativar", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Test Notification Button
+                            OutlinedButton(
+                                onClick = onSendTestNotification,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("btn_test_notification")
+                            ) {
+                                Icon(imageVector = Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Testar Notificação Agora no Telemóvel", style = MaterialTheme.typography.labelMedium)
+                            }
+
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                            // Switch 1: Class End Notification
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                    Text(
+                                        text = "Notificar no fim de cada aula",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                    )
+                                    Text(
+                                        text = "Recebe um alerta assim que a aula terminar para preencher o sumário.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = classEndEnabled,
+                                    onCheckedChange = { classEndEnabled = it },
+                                    modifier = Modifier.testTag("switch_class_end_notification")
+                                )
+                            }
+
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                            // Switch 2: Daily Digest / Scheduled reminder
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                    Text(
+                                        text = "Lembrete diário a uma hora fixa",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                    )
+                                    Text(
+                                        text = "Se ainda tiveres aulas por registar, a app avisa-te no horário escolhido.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = dailyDigestEnabled,
+                                    onCheckedChange = { dailyDigestEnabled = it },
+                                    modifier = Modifier.testTag("switch_daily_digest_notification")
+                                )
+                            }
+
+                            // Time Picker for Daily Digest
+                            if (dailyDigestEnabled) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Schedule,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Text(
+                                                    text = "Hora do lembrete diário:",
+                                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                                )
+                                            }
+
+                                            Text(
+                                                text = String.format("%02d:%02d", dailyDigestHour, dailyDigestMinute),
+                                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+
+                                        // Quick Presets
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            listOf(
+                                                17 to 0,
+                                                17 to 30,
+                                                18 to 0,
+                                                18 to 30,
+                                                19 to 0
+                                            ).forEach { (h, m) ->
+                                                val isSelected = dailyDigestHour == h && dailyDigestMinute == m
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clickable {
+                                                            dailyDigestHour = h
+                                                            dailyDigestMinute = m
+                                                        }
+                                                ) {
+                                                    Text(
+                                                        text = String.format("%02d:%02d", h, m),
+                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                        ),
+                                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        textAlign = TextAlign.Center,
+                                                        modifier = Modifier.padding(vertical = 6.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Calendário de Testes (CEPAO e LiceuOeiras)
                     Card(
                         colors = CardDefaults.cardColors(
@@ -562,7 +836,15 @@ function doPost(e) {
                 // Bottom Save Button
                 Button(
                     onClick = {
-                        onSave(docenteName, webhookUrl, sheetViewUrl)
+                        onSave(
+                            docenteName,
+                            webhookUrl,
+                            sheetViewUrl,
+                            classEndEnabled,
+                            dailyDigestEnabled,
+                            dailyDigestHour,
+                            dailyDigestMinute
+                        )
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -576,7 +858,7 @@ function doPost(e) {
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "InovLabs_logs v1.0.1 (Build 2)",
+                    text = "InovLabs_logs v1.0.3 (Build 4)",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     modifier = Modifier.align(Alignment.CenterHorizontally)
