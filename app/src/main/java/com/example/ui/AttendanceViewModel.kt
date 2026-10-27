@@ -27,6 +27,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import com.example.data.repository.AttendanceLogResult
+
+data class SheetNotFoundWarning(
+    val eventId: Long,
+    val attemptedSheetName: String,
+    val message: String,
+    val availableSheets: List<String> = emptyList()
+)
+
 data class AttendanceUiState(
     val calendars: List<CalendarInfo> = emptyList(),
     val selectedCalendarId: Long? = null,
@@ -52,7 +61,9 @@ data class AttendanceUiState(
     val isDailyDigestEnabled: Boolean = false,
     val dailyDigestHour: Int = 18,
     val dailyDigestMinute: Int = 0,
-    val hasNotificationPermission: Boolean = false
+    val hasNotificationPermission: Boolean = false,
+    val sheetNotFoundWarning: SheetNotFoundWarning? = null,
+    val availableSheets: List<String> = emptyList()
 )
 
 class AttendanceViewModel(application: Application) : AndroidViewModel(application) {
@@ -90,6 +101,16 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
 
     init {
         refreshData()
+        refreshAvailableSheets()
+        viewModelScope.launch {
+            attendanceRecords.collect { records ->
+                val recordSheets = records.map { it.sheetName.ifBlank { it.professorEscola } }.filter { it.isNotBlank() }
+                if (recordSheets.isNotEmpty()) {
+                    val combined = (_uiState.value.availableSheets + recordSheets).distinct()
+                    _uiState.value = _uiState.value.copy(availableSheets = combined)
+                }
+            }
+        }
     }
 
     fun setCalendarPermissionGranted(granted: Boolean) {
@@ -256,7 +277,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
 
         // Background persistence and sync to Google Sheets
         viewModelScope.launch {
-            val record = attendanceRepo.logAttendance(
+            val result = attendanceRepo.logAttendance(
                 eventId = event.id,
                 professorEscola = event.schoolName.ifBlank { event.title },
                 sumario = sumario.ifBlank { "Aula lecionada" },
@@ -267,10 +288,103 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 customDate = eventDateStr,
                 eventDateMillis = event.startTimeMillis
             )
-            val refreshed = _uiState.value.todayEvents.map {
-                if (it.id == event.id) it.copy(loggedRecordId = record.id) else it
+            handleSyncResult(event.id, targetSheet, result)
+        }
+    }
+
+    fun refreshAvailableSheets() {
+        viewModelScope.launch {
+            val sheets = attendanceRepo.fetchAvailableSheetsFromWebhook()
+            if (sheets.isNotEmpty()) {
+                val combined = (sheets + _uiState.value.availableSheets).distinct()
+                _uiState.value = _uiState.value.copy(availableSheets = combined)
             }
-            _uiState.value = _uiState.value.copy(todayEvents = refreshed)
+        }
+    }
+
+    private fun handleSyncResult(eventId: Long, attemptedSheetName: String, result: AttendanceLogResult) {
+        val record = result.record
+        val sync = result.syncResponse
+
+        val refreshed = _uiState.value.todayEvents.map {
+            if (it.id == eventId) it.copy(
+                loggedRecordId = record.id,
+                attendanceStatus = if (sync?.isSheetNotFound == true) AttendanceStatus.PENDING else AttendanceStatus.ATTENDED,
+                schoolName = sync?.sheetUsed?.ifBlank { attemptedSheetName } ?: attemptedSheetName
+            ) else it
+        }
+
+        if (sync == null) {
+            _uiState.value = _uiState.value.copy(
+                todayEvents = refreshed,
+                snackbarMessage = "✓ Aula guardada localmente (sem webhook configurado)"
+            )
+            return
+        }
+
+        if (sync.isSheetNotFound) {
+            val updatedSheets = if (sync.availableSheets.isNotEmpty()) {
+                (sync.availableSheets + _uiState.value.availableSheets).distinct()
+            } else {
+                _uiState.value.availableSheets
+            }
+            _uiState.value = _uiState.value.copy(
+                todayEvents = refreshed,
+                availableSheets = updatedSheets,
+                sheetNotFoundWarning = SheetNotFoundWarning(
+                    eventId = eventId,
+                    attemptedSheetName = attemptedSheetName,
+                    message = sync.message,
+                    availableSheets = sync.availableSheets
+                ),
+                snackbarMessage = "⚠️ Aba '$attemptedSheetName' não encontrada no Google Sheets! Por favor confirme ou altere o nome."
+            )
+        } else if (sync.success) {
+            val updatedSheets = if (sync.availableSheets.isNotEmpty()) {
+                (sync.availableSheets + _uiState.value.availableSheets).distinct()
+            } else {
+                _uiState.value.availableSheets
+            }
+            val rowMsg = if (sync.targetRow > 0) " (linha ${sync.targetRow})" else ""
+            _uiState.value = _uiState.value.copy(
+                todayEvents = refreshed,
+                availableSheets = updatedSheets,
+                sheetNotFoundWarning = null,
+                snackbarMessage = "✓ Registada com sucesso na aba '${sync.sheetUsed}'$rowMsg!"
+            )
+        } else {
+            _uiState.value = _uiState.value.copy(
+                todayEvents = refreshed,
+                snackbarMessage = "⚠️ Guardada localmente, mas falhou envio: ${sync.message}"
+            )
+        }
+    }
+
+    fun dismissSheetNotFoundWarning() {
+        _uiState.value = _uiState.value.copy(sheetNotFoundWarning = null)
+    }
+
+    fun retryWithNewSheetName(eventId: Long, newSheetName: String) {
+        val event = _uiState.value.todayEvents.find { it.id == eventId } ?: return
+        dismissSheetNotFoundWarning()
+        val durationMins = ((event.endTimeMillis - event.startTimeMillis) / (60 * 1000)).toInt().coerceIn(15, 240)
+        commitEditedEvent(
+            event = event,
+            sumario = CalendarRepository.extractClassSummary(event.title),
+            minutos = durationMins,
+            obs = "",
+            sheetName = newSheetName,
+            customDate = "",
+            docente = _uiState.value.docenteName,
+            allowDuplicate = false
+        )
+    }
+
+    fun openEditForWarning(warning: SheetNotFoundWarning) {
+        val event = _uiState.value.todayEvents.find { it.id == warning.eventId }
+        dismissSheetNotFoundWarning()
+        if (event != null) {
+            _uiState.value = _uiState.value.copy(activePromptEvent = event)
         }
     }
 
@@ -416,7 +530,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             }
 
             val eventDateStr = if (customDate.isNotBlank()) customDate else SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(event.startTimeMillis))
-            val record = attendanceRepo.logAttendance(
+            val result = attendanceRepo.logAttendance(
                 eventId = event.id,
                 professorEscola = targetSheet,
                 sumario = sumario.ifBlank { CalendarRepository.extractClassSummary(event.title) },
@@ -428,15 +542,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 eventDateMillis = event.startTimeMillis,
                 allowDuplicate = allowDuplicate
             )
-
-            val refreshed = _uiState.value.todayEvents.map {
-                if (it.id == event.id) it.copy(
-                    attendanceStatus = AttendanceStatus.ATTENDED,
-                    loggedRecordId = record.id,
-                    schoolName = targetSheet
-                ) else it
-            }
-            _uiState.value = _uiState.value.copy(todayEvents = refreshed)
+            handleSyncResult(event.id, targetSheet, result)
         }
     }
 
@@ -461,7 +567,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             val targetSheet = sheetName.ifBlank { event.schoolName.ifBlank { event.title } }
             val eventDateStr = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(event.startTimeMillis))
-            val record = attendanceRepo.logAttendance(
+            val result = attendanceRepo.logAttendance(
                 eventId = event.id,
                 professorEscola = event.schoolName.ifBlank { event.title },
                 sumario = sumario.ifBlank { CalendarRepository.extractClassSummary(event.title) },
@@ -472,21 +578,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 customDate = eventDateStr,
                 eventDateMillis = event.startTimeMillis
             )
-
-            val updated = _uiState.value.todayEvents.map {
-                if (it.id == event.id) it.copy(
-                    attendanceStatus = AttendanceStatus.ATTENDED,
-                    loggedRecordId = record.id
-                ) else it
-            }
-
-            val syncNote = if (record.syncedToGoogleSheets) " e sincronizado na aba '$targetSheet' do Google Sheets!" else " e registado na aba '$targetSheet'!"
-
-            _uiState.value = _uiState.value.copy(
-                todayEvents = updated,
-                activePromptEvent = null,
-                snackbarMessage = "Aula #${record.lessonNumber} guardada para '$targetSheet'$syncNote"
-            )
+            handleSyncResult(event.id, targetSheet, result)
         }
     }
 
@@ -603,7 +695,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             val dateFormatted = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(targetDate))
 
             if (markAsAttended) {
-                val record = attendanceRepo.logAttendance(
+                val result = attendanceRepo.logAttendance(
                     eventId = eventId,
                     professorEscola = schoolName.trim(),
                     sumario = sumario.trim().ifBlank { "Robótica Educativa" },
@@ -616,10 +708,10 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                     allowDuplicate = false
                 )
                 _uiState.value = _uiState.value.copy(
-                    todayEvents = listOf(newEvent.copy(loggedRecordId = record.id)) + _uiState.value.todayEvents.filter { it.id != newEvent.id },
-                    isAddEventOpen = false,
-                    snackbarMessage = "✓ Aula adicionada e presença registada na aba '${schoolName.trim()}'!"
+                    todayEvents = listOf(newEvent.copy(loggedRecordId = result.record.id)) + _uiState.value.todayEvents.filter { it.id != newEvent.id },
+                    isAddEventOpen = false
                 )
+                handleSyncResult(eventId, schoolName.trim(), result)
             } else if (markAsNotAttended) {
                 _uiState.value = _uiState.value.copy(
                     todayEvents = listOf(newEvent) + _uiState.value.todayEvents.filter { it.id != newEvent.id },
@@ -676,6 +768,8 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             isSettingsOpen = false,
             snackbarMessage = "Definições e notificações guardadas com sucesso."
         )
+
+        refreshAvailableSheets()
 
         NotificationScheduler.syncAllRemindersForToday(
             context = getApplication(),

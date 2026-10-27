@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Notifications
@@ -109,16 +111,46 @@ fun SettingsDialog(
     var dailyDigestEnabled by remember { mutableStateOf(initialDailyDigestEnabled) }
     var dailyDigestHour by remember { mutableStateOf(initialDailyDigestHour) }
     var dailyDigestMinute by remember { mutableStateOf(initialDailyDigestMinute) }
+    var showChangelogDialog by remember { mutableStateOf(false) }
 
     val sampleAppsScript = """
+function doGet(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheets = ss.getSheets().map(function(s) { return s.getName(); });
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      availableSheets: sheets
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
 function doPost(e) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var data = JSON.parse(e.postData.contents);
+    var allSheets = ss.getSheets();
+    
+    // Obter lista de todas as abas existentes na folha de cálculo
+    var availableSheetNames = allSheets.map(function(s) { return s.getName(); });
+    
+    // Suporte para ação de listar abas
+    if (data.action === "getSheets") {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        availableSheets: availableSheetNames
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
     
     // Obter todos os possíveis nomes do evento / escola
     var candidates = [
       data.sheetName,
+      data.tabName,
       data.eventTitle,
       data.eventName,
       data.schoolName,
@@ -134,7 +166,6 @@ function doPost(e) {
         .replace(/[^a-z0-9]/g, "");
     }
     
-    var allSheets = ss.getSheets();
     var matchedSheet = null;
     
     // 1. Procura a aba que corresponda ao nome do evento
@@ -168,11 +199,15 @@ function doPost(e) {
       if (matchedSheet) break;
     }
     
-    // 2. SE NÃO EXISTIR ABA CORRESPONDENTE: DESCARTAR
+    // 2. SE NÃO EXISTIR ABA CORRESPONDENTE: NÃO CRIAR NOVA ABA, ENVIAR AVISO
     if (!matchedSheet) {
+      var requestedName = (data.sheetName || data.eventTitle || data.eventName || "").toString().trim();
       return ContentService.createTextOutput(JSON.stringify({
-        status: "discarded",
-        message: "Nenhuma aba encontrada com o nome do evento."
+        status: "warning_sheet_not_found",
+        code: "SHEET_NOT_FOUND",
+        message: "Nenhuma folha encontrada correspondente a '" + requestedName + "'. Por favor confirme ou altere o nome da turma na app.",
+        requestedName: requestedName,
+        availableSheets: availableSheetNames
       })).setMimeType(ContentService.MimeType.JSON);
     }
     
@@ -206,7 +241,8 @@ function doPost(e) {
         status: "success",
         action: "deleted",
         deleted: deleted,
-        sheetUsed: sheet.getName()
+        sheetUsed: sheet.getName(),
+        availableSheets: availableSheetNames
       })).setMimeType(ContentService.MimeType.JSON);
     }
     
@@ -237,17 +273,29 @@ function doPost(e) {
       }
     }
     
-    // Se for nova linha ou duplicado: encontrar próxima linha vazia
+    // 5. ENCONTRAR A PRÓXIMA LINHA COMPLETAMENTE NÃO UTILIZADA
+    // (Verifica TODAS as colunas da linha, e não apenas a coluna 'Nº Aula')
     if (targetRow === -1) {
+      var totalCols = Math.max(sheet.getLastColumn(), 7);
       if (lastRow > 1) {
-        var colA = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-        for (var r = 0; r < colA.length; r++) {
-          if (colA[r][0] === "" || colA[r][0] === null || colA[r][0] === undefined) {
+        var allData = sheet.getRange(2, 1, lastRow - 1, totalCols).getValues();
+        for (var r = 0; r < allData.length; r++) {
+          var isRowEmpty = true;
+          for (var c = 0; c < allData[r].length; c++) {
+            var cellVal = allData[r][c];
+            if (cellVal !== "" && cellVal !== null && cellVal !== undefined && String(cellVal).trim() !== "") {
+              isRowEmpty = false;
+              break;
+            }
+          }
+          if (isRowEmpty) {
             targetRow = r + 2;
             break;
           }
         }
       }
+      
+      // Se não houver linha intermédia completamente livre, coloca na linha seguinte à última com dados (lastRow + 1)
       if (targetRow === -1) {
         targetRow = Math.max(lastRow + 1, 2);
       }
@@ -268,7 +316,8 @@ function doPost(e) {
       status: "success",
       sheetUsed: sheet.getName(),
       row: targetRow,
-      updated: (targetRow <= lastRow)
+      updated: (targetRow <= lastRow),
+      availableSheets: availableSheetNames
     })).setMimeType(ContentService.MimeType.JSON);
     
   } catch (err) {
@@ -457,7 +506,8 @@ function doPost(e) {
                                                     "   • Quem tem acesso: Qualquer pessoa (Anyone)\n" +
                                                     "6. Clique em Implementar, dê as permissões e copie o URL da Aplicação Web (/exec).\n" +
                                                     "7. Cole o URL no campo acima.\n\n" +
-                                                    "✨ Suporte Multi-Abas: O script encaminha automaticamente o registo de cada aula para o separador/aba correspondente ao evento do calendário (ou cria a aba se ainda não existir).",
+                                                    "✨ Validação de Abas: O script encaminha o registo para a aba correspondente. Se o nome não corresponder a nenhuma folha, NÃO cria nova aba e devolve um aviso à app a pedir para confirmar/alterar o nome da turma, indicando as abas existentes.\n" +
+                                                    "🔍 Linhas Livres: Cada aula é inserida na próxima linha completamente desocupada (verificando todas as colunas da folha, não apenas a coluna 'Nº Aula').",
                                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -855,15 +905,201 @@ function doPost(e) {
                     Text("Guardar Definições")
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                Text(
-                    text = "InovLabs_logs v1.0.3 (Build 4)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
+                // App Information & Version Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "InovLabs_logs",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = "v${com.example.BuildConfig.VERSION_NAME}",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Build: ${com.example.BuildConfig.VERSION_CODE} • Compilação: ${com.example.BuildConfig.BUILD_TIME}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Registo de presenças & Google Sheets",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TextButton(
+                                onClick = { showChangelogDialog = true },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Text("Changelog", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+
+    if (showChangelogDialog) {
+        AlertDialog(
+            onDismissRequest = { showChangelogDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Registo de Versões")
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "v1.0.4 (Atual - Build 5)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "• Validação de nome de aba no Sheets: Se o nome não existir, não cria abas extras e devolve aviso com as abas disponíveis para confirmação/alteração\n" +
+                                       "• Deteção de linha desocupada melhorada: Verificação de todas as colunas para encontrar a próxima linha completamente livre\n" +
+                                       "• Sugestão e seleção rápida de abas existentes nos diálogos de adicionar e editar aula",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "v1.0.3 (Build 4)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "• Sistema de Versionamento unificado (UI, APK, Docs, BuildConfig)\n" +
+                                       "• Notificações no fim de cada aula para preenchimento de sumário\n" +
+                                       "• Lembrete diário agendado com horário customizável\n" +
+                                       "• Reprogramação automática de alarmes após reinício do telemóvel",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "v1.0.2 (Build 3)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "• Separação das ações 'Guardar' (local) e 'Submeter' (commit Google Sheets)\n" +
+                                       "• Explicação clara sobre armazenamento local vs sincronização remota",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "v1.0.1 (Build 2)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "• Nova identidade visual InovLabs_logs\n" +
+                                       "• Publicação automatizada de APKs no GitHub Releases\n" +
+                                       "• Diálogo unificado para adicionar e editar aulas\n" +
+                                       "• Eliminação sincronizada no Google Sheets (deleteRow)",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showChangelogDialog = false }) {
+                    Text("Fechar")
+                }
+            }
+        )
     }
 }

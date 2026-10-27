@@ -28,6 +28,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -46,6 +48,8 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -175,10 +179,26 @@ fun AttendanceScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(horizontalAlignment = Alignment.Start) {
-                            Text(
-                                text = "InovLabs_logs",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "InovLabs_logs",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                )
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "v${com.example.BuildConfig.VERSION_NAME}",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
                             Text(
                                 text = uiState.currentDateFormatted,
                                 style = MaterialTheme.typography.labelSmall,
@@ -394,6 +414,7 @@ fun AttendanceScreen(
             selectedDateFormatted = uiState.currentDateFormatted,
             targetDateMillis = uiState.selectedDateMillis,
             docenteName = uiState.docenteName,
+            availableSheets = uiState.availableSheets,
             onDismiss = { viewModel.setAddEventOpen(false) },
             onAddClass = { schoolName, sumario, durationMin, customDate, docente, obs, markAsAttended, markAsNotAttended ->
                 viewModel.addManualClassEvent(
@@ -417,6 +438,7 @@ fun AttendanceScreen(
         AttendancePromptDialog(
             event = activePrompt,
             docenteName = uiState.docenteName,
+            availableSheets = uiState.availableSheets,
             onDismiss = { viewModel.dismissAttendancePrompt() },
             onNotAttended = { viewModel.markNotAttended(activePrompt) },
             onResetOrDelete = { viewModel.resetAttendanceStatus(activePrompt) },
@@ -425,6 +447,114 @@ fun AttendanceScreen(
             },
             onCommit = { sumario, mins, obs, sheetName, customDate, docente, allowDuplicate ->
                 viewModel.commitEditedEvent(activePrompt, sumario, mins, obs, sheetName, customDate, docente, allowDuplicate)
+            }
+        )
+    }
+
+    // Sheet Not Found Warning Dialog
+    val sheetWarning = uiState.sheetNotFoundWarning
+    if (sheetWarning != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissSheetNotFoundWarning() },
+            modifier = Modifier.testTag("dialog_sheet_not_found_warning"),
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Aba Não Encontrada no Sheets",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "A aba para '${sheetWarning.attemptedSheetName}' não foi encontrada na sua folha de cálculo Google Sheets.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Nenhuma nova folha foi criada. Por favor confirme ou altere o nome da turma para coincidir com uma das abas existentes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (sheetWarning.availableSheets.isNotEmpty()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Abas disponíveis no seu Google Sheets (toque para selecionar):",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    sheetWarning.availableSheets.forEach { availableSheet ->
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    viewModel.retryWithNewSheetName(sheetWarning.eventId, availableSheet)
+                                                }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    text = availableSheet,
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                                )
+                                                Text(
+                                                    text = "Usar esta aba →",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.openEditForWarning(sheetWarning) },
+                    modifier = Modifier.testTag("btn_warning_change_name")
+                ) {
+                    Text("Alterar Nome Manualmente")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.dismissSheetNotFoundWarning() },
+                    modifier = Modifier.testTag("btn_warning_dismiss")
+                ) {
+                    Text("Fechar")
+                }
             }
         )
     }

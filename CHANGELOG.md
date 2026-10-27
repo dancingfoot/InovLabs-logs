@@ -1,5 +1,20 @@
 # Registo de Versões (Changelog)
 
+## [1.0.4] - 2026-10-27
+
+### Destaques & Correções Principais
+- **Validação Rigorosa de Abas do Google Sheets**:
+  - Quando uma aula é submetida e o nome da turma/escola não corresponder a nenhuma das abas existentes na folha de cálculo, o script **não cria abas novas** e devolve um aviso com código `warning_sheet_not_found` / `SHEET_NOT_FOUND`.
+  - A aplicação Android captura esta resposta e exibe imediatamente uma janela de aviso ("Aba Não Encontrada no Sheets"), indicando ao utilizador que deve confirmar ou alterar o nome da turma.
+  - A janela de aviso lista todas as abas atualmente disponíveis no Google Sheets, permitindo ao utilizador tocar diretamente no nome correto para corrigir e sincronizar num só clique, ou alterar manualmente.
+- **Deteção de Linha Livre Inspecionando Todas as Colunas**:
+  - No Google Apps Script, a verificação da próxima linha desocupada foi corrigida para analisar **todas as colunas** da folha (e não apenas a coluna "Nº Aula").
+  - Garante que nenhuma linha que contenha notas, fórmulas ou dados noutras colunas (como Docente, Observações, etc.) é sobrescrita acidentalmente.
+- **Sugestão e Seleção Rápida de Abas Existentes**:
+  - Tanto na janela de adicionar aula (`AddEventDialog`) como na de editar aula (`AttendancePromptDialog`), são agora apresentados chips com os nomes das abas conhecidas do Sheets para preenchimento rápido sem erros de digitação.
+- **Incremento de Versão**:
+  - Atualizado para a versão **1.0.4** (Build 5).
+
 ## [1.0.3] - 2026-10-23
 
 ### Destaques & Correções Principais

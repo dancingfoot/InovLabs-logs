@@ -54,6 +54,7 @@ fun AddEventDialog(
     selectedDateFormatted: String = "",
     targetDateMillis: Long = System.currentTimeMillis(),
     docenteName: String = "",
+    availableSheets: List<String> = emptyList(),
     onDismiss: () -> Unit,
     onAddClass: (
         schoolName: String,
@@ -146,6 +147,37 @@ fun AddEventDialog(
                         .testTag("input_add_school_name"),
                     singleLine = true
                 )
+
+                if (availableSheets.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Abas conhecidas no Sheets (toque para preencher):",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        androidx.compose.foundation.lazy.LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(availableSheets.size) { idx ->
+                                val sName = availableSheets[idx]
+                                val isSelected = sheetName.trim().equals(sName.trim(), ignoreCase = true)
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.clickable { sheetName = sName }
+                                ) {
+                                    Text(
+                                        text = sName,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal),
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // Summary / Topic of Class
                 OutlinedTextField(

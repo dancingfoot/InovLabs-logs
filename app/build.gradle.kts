@@ -1,4 +1,7 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 plugins {
   alias(libs.plugins.android.application)
@@ -13,12 +16,26 @@ android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
+  val versionMajor = 1
+  val versionMinor = 0
+  val versionPatch = 4
+  val versionBuild = 5
+  val appVersionName = "$versionMajor.$versionMinor.$versionPatch"
+  val appVersionCode = versionBuild
+
   defaultConfig {
     applicationId = "com.aistudio.classtracker.vymz"
     minSdk = 24
     targetSdk = 36
-    versionCode = 4
-    versionName = "1.0.3"
+    versionCode = appVersionCode
+    versionName = appVersionName
+
+    val formattedBuildTime = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT).format(Date())
+    buildConfigField("String", "BUILD_TIME", "\"$formattedBuildTime\"")
+    buildConfigField("int", "VERSION_MAJOR", "$versionMajor")
+    buildConfigField("int", "VERSION_MINOR", "$versionMinor")
+    buildConfigField("int", "VERSION_PATCH", "$versionPatch")
+    buildConfigField("int", "VERSION_BUILD", "$versionBuild")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -60,6 +77,28 @@ android {
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
+  }
+
+  base.archivesName.set("InovLabs_logs-v${appVersionName}-b${appVersionCode}")
+}
+
+tasks.register<Copy>("copyVersionedApk") {
+  dependsOn("assembleDebug")
+  from(layout.buildDirectory.dir("outputs/apk/debug"))
+  include("*.apk")
+  into(layout.projectDirectory.dir("../apk"))
+  rename { _ ->
+    "InovLabs_logs-v1.0.3.apk"
+  }
+}
+
+tasks.register<Copy>("copyDefaultApk") {
+  dependsOn("copyVersionedApk")
+  from(layout.buildDirectory.dir("outputs/apk/debug"))
+  include("*.apk")
+  into(layout.projectDirectory.dir("../apk"))
+  rename { _ ->
+    "InovLabs_logs.apk"
   }
 }
 

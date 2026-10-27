@@ -19,6 +19,21 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+data class SheetSyncResponse(
+    val success: Boolean,
+    val status: String,
+    val message: String,
+    val isSheetNotFound: Boolean = false,
+    val availableSheets: List<String> = emptyList(),
+    val targetRow: Int = -1,
+    val sheetUsed: String = ""
+)
+
+data class AttendanceLogResult(
+    val record: AttendanceRecord,
+    val syncResponse: SheetSyncResponse?
+)
+
 class AttendanceRepository(
     private val context: Context,
     private val attendanceDao: AttendanceDao
@@ -61,7 +76,7 @@ class AttendanceRepository(
         customDate: String? = null,
         eventDateMillis: Long = 0L,
         allowDuplicate: Boolean = false
-    ): AttendanceRecord = withContext(Dispatchers.IO) {
+    ): AttendanceLogResult = withContext(Dispatchers.IO) {
         val targetSheet = sheetName.ifBlank { professorEscola.ifBlank { eventTitle } }
         val docenteName = getDocenteName()
         val formattedDate = customDate?.ifBlank { null } ?: (
@@ -89,10 +104,10 @@ class AttendanceRepository(
 
         val isUpdate = existingRecord != null && !allowDuplicate
 
-        var synced = false
+        var syncResponse: SheetSyncResponse? = null
         val webhookUrl = getGoogleSheetWebhookUrl()
         if (webhookUrl.isNotBlank()) {
-            synced = sendToGoogleSheetWebhook(
+            syncResponse = sendToGoogleSheetWebhook(
                 webhookUrl = webhookUrl,
                 sheetName = targetSheet,
                 eventTitle = eventTitle,
@@ -121,16 +136,18 @@ class AttendanceRepository(
             eventId = eventId,
             eventTitle = eventTitle,
             sheetName = targetSheet,
-            syncedToGoogleSheets = synced
+            syncedToGoogleSheets = (syncResponse?.success == true)
         )
 
-        if (existingRecord != null && !allowDuplicate) {
+        val savedRecord = if (existingRecord != null && !allowDuplicate) {
             attendanceDao.updateRecord(record)
             record
         } else {
             val id = attendanceDao.insertRecord(record)
             record.copy(id = id)
         }
+
+        AttendanceLogResult(record = savedRecord, syncResponse = syncResponse)
     }
 
     suspend fun saveRecordLocally(
@@ -250,8 +267,8 @@ class AttendanceRepository(
         }
     }
 
-    // Google Sheets Webhook HTTP call with duplicate prevention headers and uniqueId
-    private suspend fun sendToGoogleSheetWebhook(
+    // Google Sheets Webhook HTTP call with duplicate prevention headers, uniqueId, and response parsing
+    suspend fun sendToGoogleSheetWebhook(
         webhookUrl: String,
         sheetName: String,
         eventTitle: String,
@@ -265,7 +282,14 @@ class AttendanceRepository(
         isUpdate: Boolean = false,
         eventId: Long = 0L,
         allowDuplicate: Boolean = false
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): SheetSyncResponse = withContext(Dispatchers.IO) {
+        if (webhookUrl.isBlank()) {
+            return@withContext SheetSyncResponse(
+                success = false,
+                status = "no_url",
+                message = "URL do Webhook não configurado"
+            )
+        }
         try {
             val uniqueId = "${sheetName.replace(" ", "_")}_${date.replace("/", "_")}_${lessonNumber}"
             val json = JSONObject().apply {
@@ -299,19 +323,128 @@ class AttendanceRepository(
                 .build()
 
             httpClient.newCall(request).execute().use { response ->
-                response.isSuccessful || response.code in 200..399
+                if (!response.isSuccessful && response.code !in 200..399) {
+                    return@withContext SheetSyncResponse(
+                        success = false,
+                        status = "http_error_${response.code}",
+                        message = "Erro de rede / servidor (${response.code})"
+                    )
+                }
+
+                val bodyStr = response.body?.string()?.trim() ?: ""
+                if (bodyStr.isBlank()) {
+                    return@withContext SheetSyncResponse(
+                        success = true,
+                        status = "empty_body",
+                        message = "OK",
+                        sheetUsed = sheetName
+                    )
+                }
+
+                try {
+                    val respJson = JSONObject(bodyStr)
+                    val status = respJson.optString("status", "")
+                    val code = respJson.optString("code", "")
+                    val msg = respJson.optString("message", "")
+                    val sheetUsed = respJson.optString("sheetUsed", "")
+                    val row = respJson.optInt("row", -1)
+                    val sheetsList = mutableListOf<String>()
+                    val arr = respJson.optJSONArray("availableSheets")
+                    if (arr != null) {
+                        for (i in 0 until arr.length()) {
+                            val sName = arr.getString(i).trim()
+                            if (sName.isNotBlank()) sheetsList.add(sName)
+                        }
+                    }
+
+                    val isNotFound = status == "warning_sheet_not_found" ||
+                            code == "SHEET_NOT_FOUND" ||
+                            status == "discarded" ||
+                            status == "warning"
+
+                    val isSuccess = status == "success"
+
+                    val returnMessage = when {
+                        msg.isNotBlank() -> msg
+                        isNotFound -> "Aba '$sheetName' não encontrada no Google Sheets. Por favor confirme ou altere o nome da turma na app."
+                        isSuccess -> "Registado com sucesso na aba '$sheetUsed'"
+                        else -> "Resposta recebida: $status"
+                    }
+
+                    SheetSyncResponse(
+                        success = isSuccess,
+                        status = status,
+                        message = returnMessage,
+                        isSheetNotFound = isNotFound,
+                        availableSheets = sheetsList,
+                        targetRow = row,
+                        sheetUsed = sheetUsed.ifBlank { sheetName }
+                    )
+                } catch (e: Exception) {
+                    SheetSyncResponse(
+                        success = true,
+                        status = "non_json",
+                        message = bodyStr.take(150),
+                        sheetUsed = sheetName
+                    )
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            false
+            SheetSyncResponse(
+                success = false,
+                status = "exception",
+                message = e.localizedMessage ?: "Erro de ligação ao Sheets"
+            )
         }
     }
 
-    suspend fun syncPendingRecordToSheets(record: AttendanceRecord): Boolean = withContext(Dispatchers.IO) {
+    suspend fun fetchAvailableSheetsFromWebhook(): List<String> = withContext(Dispatchers.IO) {
         val webhookUrl = getGoogleSheetWebhookUrl()
-        if (webhookUrl.isBlank()) return@withContext false
+        if (webhookUrl.isBlank()) return@withContext emptyList()
+        try {
+            val json = JSONObject().apply {
+                put("action", "getSheets")
+            }
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val body = json.toString().toRequestBody(mediaType)
+            val request = Request.Builder()
+                .url(webhookUrl)
+                .post(body)
+                .build()
 
-        val success = sendToGoogleSheetWebhook(
+            httpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful || response.code in 200..399) {
+                    val bodyStr = response.body?.string() ?: ""
+                    val obj = JSONObject(bodyStr)
+                    val arr = obj.optJSONArray("availableSheets") ?: obj.optJSONArray("sheets")
+                    if (arr != null) {
+                        val list = mutableListOf<String>()
+                        for (i in 0 until arr.length()) {
+                            val name = arr.getString(i).trim()
+                            if (name.isNotBlank()) list.add(name)
+                        }
+                        return@withContext list
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore failure, fallback to empty
+        }
+        emptyList()
+    }
+
+    suspend fun syncPendingRecordToSheets(record: AttendanceRecord): SheetSyncResponse = withContext(Dispatchers.IO) {
+        val webhookUrl = getGoogleSheetWebhookUrl()
+        if (webhookUrl.isBlank()) {
+            return@withContext SheetSyncResponse(
+                success = false,
+                status = "no_url",
+                message = "URL do Webhook não configurado"
+            )
+        }
+
+        val resp = sendToGoogleSheetWebhook(
             webhookUrl = webhookUrl,
             sheetName = record.sheetName.ifBlank { record.professorEscola },
             eventTitle = record.eventTitle,
@@ -326,10 +459,10 @@ class AttendanceRepository(
             eventId = record.eventId
         )
 
-        if (success && !record.syncedToGoogleSheets) {
+        if (resp.success && !record.syncedToGoogleSheets) {
             attendanceDao.updateRecord(record.copy(syncedToGoogleSheets = true))
         }
-        success
+        resp
     }
 
     // Generate CSV formatted exactly matching user specification:
