@@ -120,6 +120,7 @@ function doGet(e) {
     var sheets = ss.getSheets().map(function(s) { return s.getName(); });
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
+      version: "1.0.5",
       availableSheets: sheets
     })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
@@ -130,16 +131,45 @@ function doGet(e) {
   }
 }
 
+function normalizeText(str) {
+  if (!str) return "";
+  return str.toString()
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function normalizeDate(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    var d = val.getDate();
+    var m = val.getMonth() + 1;
+    var y = val.getFullYear();
+    var pad = function(n) { return (n < 10 ? "0" : "") + n; };
+    return pad(d) + "/" + pad(m) + "/" + y;
+  }
+  var s = val.toString().trim();
+  var isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (isoMatch) {
+    var pad = function(n) { return (parseInt(n, 10) < 10 ? "0" : "") + parseInt(n, 10); };
+    return pad(isoMatch[3]) + "/" + pad(isoMatch[2]) + "/" + isoMatch[1];
+  }
+  var dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dmyMatch) {
+    var pad = function(n) { return (parseInt(n, 10) < 10 ? "0" : "") + parseInt(n, 10); };
+    return pad(dmyMatch[1]) + "/" + pad(dmyMatch[2]) + "/" + dmyMatch[3];
+  }
+  return s.replace(/[^0-9]/g, "");
+}
+
 function doPost(e) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var data = JSON.parse(e.postData.contents);
     var allSheets = ss.getSheets();
     
-    // Obter lista de todas as abas existentes na folha de cálculo
     var availableSheetNames = allSheets.map(function(s) { return s.getName(); });
     
-    // Suporte para ação de listar abas
     if (data.action === "getSheets") {
       return ContentService.createTextOutput(JSON.stringify({
         status: "success",
@@ -147,7 +177,6 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
     
-    // Obter todos os possíveis nomes do evento / escola
     var candidates = [
       data.sheetName,
       data.tabName,
@@ -157,26 +186,15 @@ function doPost(e) {
       data.professorEscola
     ];
     
-    // Função para normalizar texto (ignorar acentos, espaços e maiúsculas)
-    function normalize(str) {
-      if (!str) return "";
-      return str.toString()
-        .toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9]/g, "");
-    }
-    
     var matchedSheet = null;
     
-    // 1. Procura a aba que corresponda ao nome do evento
     for (var c = 0; c < candidates.length; c++) {
       var candidate = (candidates[c] || "").toString().trim();
       if (!candidate) continue;
       
-      var normCandidate = normalize(candidate);
+      var normCandidate = normalizeText(candidate);
       if (!normCandidate) continue;
       
-      // A. Correspondência exata no nome da aba
       for (var i = 0; i < allSheets.length; i++) {
         var sName = allSheets[i].getName().trim();
         if (sName.toLowerCase() === candidate.toLowerCase()) {
@@ -186,9 +204,8 @@ function doPost(e) {
       }
       if (matchedSheet) break;
       
-      // B. Correspondência aproximada (ignora espaços, maiúsculas, hífens)
       for (var i = 0; i < allSheets.length; i++) {
-        var normSheetName = normalize(allSheets[i].getName());
+        var normSheetName = normalizeText(allSheets[i].getName());
         if (normSheetName && (normSheetName === normCandidate || 
             normCandidate.indexOf(normSheetName) !== -1 || 
             normSheetName.indexOf(normCandidate) !== -1)) {
@@ -199,7 +216,6 @@ function doPost(e) {
       if (matchedSheet) break;
     }
     
-    // 2. SE NÃO EXISTIR ABA CORRESPONDENTE: NÃO CRIAR NOVA ABA, ENVIAR AVISO
     if (!matchedSheet) {
       var requestedName = (data.sheetName || data.eventTitle || data.eventName || "").toString().trim();
       return ContentService.createTextOutput(JSON.stringify({
@@ -212,25 +228,33 @@ function doPost(e) {
     }
     
     var sheet = matchedSheet;
-    var targetDate = (data.data || data.date || "").toString().trim();
+    var targetDateRaw = (data.data || data.date || "").toString().trim();
+    var normTargetDate = normalizeDate(targetDateRaw);
+    var targetSummary = (data.sumario || "").toString().trim();
+    var normTargetSummary = normalizeText(targetSummary);
+    var targetSchool = (data.professorEscola || data.schoolName || sheet.getName()).toString().trim();
+    var normTargetSchool = normalizeText(targetSchool);
     var lessonNum = parseInt(data.lessonNumber, 10) || 0;
     var lastRow = sheet.getLastRow();
     
-    // 3. AÇÃO: ELIMINAR LINHA (QUANDO DESFAZ OU ELIMINA REGISTO NA APP)
+    if (lastRow === 0) {
+      sheet.getRange(1, 1, 1, 7).setValues([["Nº Aula", "Docente InovLabs", "Professor Escola", "Data", "Sumário", "Minutos", "Obs"]]);
+      lastRow = 1;
+    }
+    
     if (data.action === "deleteRow") {
       var deleted = false;
       if (lastRow > 1) {
-        var values = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+        var numRows = lastRow - 1;
+        var values = sheet.getRange(2, 1, numRows, 5).getValues();
         for (var r = values.length - 1; r >= 0; r--) {
-          var rowDate = (values[r][3] ? values[r][3].toString() : "");
-          var rowLesson = parseInt(values[r][0], 10) || 0;
-          var rowSumario = (values[r][4] ? values[r][4].toString() : "");
+          var rowDateNorm = normalizeDate(values[r][3]);
+          var rowSumarioNorm = normalizeText(values[r][4]);
           
-          var matchDate = targetDate && (rowDate.indexOf(targetDate) !== -1 || targetDate.indexOf(rowDate) !== -1);
-          var matchLesson = lessonNum > 0 && rowLesson === lessonNum;
-          var matchSumario = data.sumario && rowSumario.toLowerCase().indexOf(data.sumario.toLowerCase()) !== -1;
+          var matchDate = normTargetDate && (rowDateNorm === normTargetDate || rowDateNorm.indexOf(normTargetDate) !== -1);
+          var matchSumario = normTargetSummary && (rowSumarioNorm.indexOf(normTargetSummary) !== -1 || normTargetSummary.indexOf(rowSumarioNorm) !== -1);
           
-          if ((matchDate && matchLesson) || (matchDate && matchSumario)) {
+          if (matchDate && (matchSumario || normTargetSummary === "")) {
             sheet.deleteRow(r + 2);
             deleted = true;
             break;
@@ -246,35 +270,55 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
     
-    // 4. AÇÃO: ADICIONAR OU ATUALIZAR LINHA
-    if (lastRow === 0) {
-      sheet.appendRow(["Nº Aula", "Docente InovLabs", "Professor Escola", "Data", "Sumário", "Minutos", "Obs"]);
-      lastRow = 1;
-    }
+    var existingRow = -1;
+    var existingSummary = "";
     
-    var targetRow = -1;
-    
-    // Se NÃO for permitido duplicados, verifica se já existe registo da mesma aula nesta data
-    if (!data.allowDuplicate && lastRow > 1) {
-      var values = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+    if (lastRow > 1) {
+      var numRows = lastRow - 1;
+      var values = sheet.getRange(2, 1, numRows, Math.max(sheet.getLastColumn(), 7)).getValues();
+      
       for (var r = 0; r < values.length; r++) {
-        var rowDate = (values[r][3] ? values[r][3].toString() : "");
-        var rowLesson = parseInt(values[r][0], 10) || 0;
-        var rowSumario = (values[r][4] ? values[r][4].toString() : "");
+        var rowDateNorm = normalizeDate(values[r][3]);
+        var rowDocente = normalizeText(values[r][1]);
+        var rowEscola = normalizeText(values[r][2]);
+        var rowSumarioNorm = normalizeText(values[r][4]);
         
-        var matchDate = targetDate && (rowDate.indexOf(targetDate) !== -1 || targetDate.indexOf(rowDate) !== -1);
-        var matchLesson = lessonNum > 0 && rowLesson === lessonNum;
-        var matchSumario = data.sumario && rowSumario.toLowerCase().indexOf(data.sumario.toLowerCase()) !== -1;
+        var isDateMatch = normTargetDate && (rowDateNorm === normTargetDate || (rowDateNorm.length > 5 && normTargetDate.length > 5 && (rowDateNorm.indexOf(normTargetDate) !== -1 || normTargetDate.indexOf(rowDateNorm) !== -1)));
         
-        if ((matchDate && matchLesson) || (matchDate && matchSumario)) {
-          targetRow = r + 2;
-          break;
+        if (isDateMatch) {
+          var isSummaryMatch = (normTargetSummary !== "" && rowSumarioNorm !== "" && (rowSumarioNorm.indexOf(normTargetSummary) !== -1 || normTargetSummary.indexOf(rowSumarioNorm) !== -1));
+          var isSchoolMatch = (normTargetSchool !== "" && rowEscola !== "" && (rowEscola.indexOf(normTargetSchool) !== -1 || normTargetSchool.indexOf(rowEscola) !== -1));
+          var isGeneralLessonOnDate = (rowSumarioNorm !== "" || rowEscola !== "");
+          
+          if (isSummaryMatch || isSchoolMatch || isGeneralLessonOnDate) {
+            existingRow = r + 2;
+            existingSummary = (values[r][4] ? values[r][4].toString() : "");
+            break;
+          }
         }
       }
     }
     
-    // 5. ENCONTRAR A PRÓXIMA LINHA COMPLETAMENTE NÃO UTILIZADA
-    // (Verifica TODAS as colunas da linha, e não apenas a coluna 'Nº Aula')
+    if (existingRow > 1 && !data.forceUpdate && !data.allowDuplicate) {
+      var displayName = targetSummary || targetSchool || sheet.getName();
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "warning_duplicate_entry",
+        code: "DUPLICATE_ENTRY",
+        message: "Já existe uma aula registada para '" + displayName + "' na data " + targetDateRaw + " (linha " + existingRow + "). Deseja atualizar a linha existente ou criar uma nova linha?",
+        sheetUsed: sheet.getName(),
+        existingRow: existingRow,
+        existingSummary: existingSummary,
+        targetRow: existingRow,
+        availableSheets: availableSheetNames
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var targetRow = -1;
+    
+    if (existingRow > 1 && data.forceUpdate) {
+      targetRow = existingRow;
+    }
+    
     if (targetRow === -1) {
       var totalCols = Math.max(sheet.getLastColumn(), 7);
       if (lastRow > 1) {
@@ -295,13 +339,15 @@ function doPost(e) {
         }
       }
       
-      // Se não houver linha intermédia completamente livre, coloca na linha seguinte à última com dados (lastRow + 1)
       if (targetRow === -1) {
         targetRow = Math.max(lastRow + 1, 2);
       }
     }
     
-    // Escreve os dados na linha correspondente
+    if (targetRow < 2) {
+      targetRow = 2;
+    }
+    
     sheet.getRange(targetRow, 1, 1, 7).setValues([[
       data.lessonNumber,
       data.docenteInovLabs,
@@ -316,7 +362,8 @@ function doPost(e) {
       status: "success",
       sheetUsed: sheet.getName(),
       row: targetRow,
-      updated: (targetRow <= lastRow),
+      updated: (existingRow > 1 && data.forceUpdate),
+      isDuplicateCreated: (existingRow > 1 && data.allowDuplicate),
       availableSheets: availableSheetNames
     })).setMimeType(ContentService.MimeType.JSON);
     

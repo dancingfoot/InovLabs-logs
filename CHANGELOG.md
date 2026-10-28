@@ -1,5 +1,23 @@
 # Registo de Versões (Changelog)
 
+## [1.0.5] - 2026-10-28
+
+### Destaques & Correções Principais
+- **Proteção Estrita da Linha 1 no Google Sheets**:
+  - Garantido que a Linha 1 é reservada exclusivamente para cabeçalhos (`["Nº Aula", "Docente InovLabs", "Professor Escola", "Data", "Sumário", "Minutos", "Obs"]`).
+  - Novas entradas são sempre inseridas na Linha 2 ou seguinte (`targetRow >= 2`), impedindo a substituição acidental dos títulos das colunas.
+- **Verificação de Entradas Anteriores Sem a Coluna A**:
+  - A verificação de aulas já existentes ignora a Coluna A ("Nº Aula"), que frequentemente contém números arbitrários ou gerados manualmente.
+  - A deteção baseia-se na **Data** e no **Nome/Sumário/Turma**, com normalização avançada de objetos `Date` nativos do Google Sheets e formatos `DD/MM/AAAA`.
+- **Notificação de Entrada Duplicada na Mesma Data**:
+  - Quando já existe uma aula com o mesmo nome na mesma data, o script Google Apps Script não a sobrescreve silenciosamente e emite `warning_duplicate_entry`.
+  - A aplicação Android envia uma **notificação de sistema** informando o utilizador sobre o registo pré-existente e abre um diálogo interativo com opções claras:
+    - **Atualizar Existente** (`forceUpdate`): substitui a linha existente pelos dados atualizados.
+    - **Criar Nova Linha** (`allowDuplicate`): escreve uma nova linha na folha preservando a anterior.
+    - **Cancelar**: descarta o aviso sem alterações.
+- **Incremento de Versão**:
+  - Atualizado para a versão **1.0.5** (Build 6).
+
 ## [1.0.4] - 2026-10-27
 
 ### Destaques & Correções Principais

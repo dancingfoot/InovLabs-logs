@@ -176,6 +176,51 @@ object NotificationHelper {
         }
     }
 
+    fun showDuplicateEntryNotification(
+        context: Context,
+        eventId: Long,
+        schoolOrName: String,
+        date: String,
+        message: String
+    ) {
+        if (!hasNotificationPermission(context)) return
+        ensureNotificationChannel(context)
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_OPEN_EVENT_ID, eventId)
+        }
+
+        val notifId = (eventId.hashCode() and 0x7FFFFFFF) + 1000
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notifId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = "⚠️ Aula Já Registada: $schoolOrName"
+        val bodyText = if (message.isNotBlank()) message else "Já existe uma aula registada para '$schoolOrName' na data $date no Google Sheets."
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification_bell)
+            .setContentTitle(title)
+            .setContentText(bodyText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$bodyText\nToque para ver opções de atualização ou duplicação."))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .build()
+
+        try {
+            NotificationManagerCompat.from(context).notify(notifId, notification)
+        } catch (_: SecurityException) {
+            // Permission revoked or not granted
+        }
+    }
+
     fun cancelNotification(context: Context, id: Int) {
         try {
             NotificationManagerCompat.from(context).cancel(id)

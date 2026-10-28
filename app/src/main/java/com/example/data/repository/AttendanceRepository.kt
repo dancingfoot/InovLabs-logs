@@ -24,9 +24,12 @@ data class SheetSyncResponse(
     val status: String,
     val message: String,
     val isSheetNotFound: Boolean = false,
+    val isDuplicateEntry: Boolean = false,
     val availableSheets: List<String> = emptyList(),
     val targetRow: Int = -1,
-    val sheetUsed: String = ""
+    val sheetUsed: String = "",
+    val existingRow: Int = -1,
+    val existingSummary: String = ""
 )
 
 data class AttendanceLogResult(
@@ -75,7 +78,8 @@ class AttendanceRepository(
         eventTitle: String = "",
         customDate: String? = null,
         eventDateMillis: Long = 0L,
-        allowDuplicate: Boolean = false
+        allowDuplicate: Boolean = false,
+        forceUpdate: Boolean = false
     ): AttendanceLogResult = withContext(Dispatchers.IO) {
         val targetSheet = sheetName.ifBlank { professorEscola.ifBlank { eventTitle } }
         val docenteName = getDocenteName()
@@ -102,7 +106,7 @@ class AttendanceRepository(
             (attendanceDao.getMaxLessonNumberForSheet(targetSheet) ?: attendanceDao.getMaxLessonNumber() ?: 0) + 1
         )
 
-        val isUpdate = existingRecord != null && !allowDuplicate
+        val isUpdate = (existingRecord != null || forceUpdate) && !allowDuplicate
 
         var syncResponse: SheetSyncResponse? = null
         val webhookUrl = getGoogleSheetWebhookUrl()
@@ -120,7 +124,8 @@ class AttendanceRepository(
                 obs = obs,
                 isUpdate = isUpdate,
                 eventId = eventId,
-                allowDuplicate = allowDuplicate
+                allowDuplicate = allowDuplicate,
+                forceUpdate = forceUpdate
             )
         }
 
@@ -281,7 +286,8 @@ class AttendanceRepository(
         obs: String,
         isUpdate: Boolean = false,
         eventId: Long = 0L,
-        allowDuplicate: Boolean = false
+        allowDuplicate: Boolean = false,
+        forceUpdate: Boolean = false
     ): SheetSyncResponse = withContext(Dispatchers.IO) {
         if (webhookUrl.isBlank()) {
             return@withContext SheetSyncResponse(
@@ -293,7 +299,7 @@ class AttendanceRepository(
         try {
             val uniqueId = "${sheetName.replace(" ", "_")}_${date.replace("/", "_")}_${lessonNumber}"
             val json = JSONObject().apply {
-                put("action", if (isUpdate) "updateRow" else "appendOrUpdateRow")
+                put("action", if (isUpdate || forceUpdate) "updateRow" else "appendOrUpdateRow")
                 put("sheetName", sheetName)
                 put("tabName", sheetName)
                 put("eventName", eventTitle.ifBlank { professorEscola })
@@ -312,7 +318,8 @@ class AttendanceRepository(
                 put("preventDuplicates", !allowDuplicate)
                 put("checkDuplicate", !allowDuplicate)
                 put("allowDuplicate", allowDuplicate)
-                put("isUpdate", isUpdate)
+                put("forceUpdate", forceUpdate)
+                put("isUpdate", isUpdate || forceUpdate)
             }
 
             val mediaType = "application/json; charset=utf-8".toMediaType()
@@ -348,6 +355,8 @@ class AttendanceRepository(
                     val msg = respJson.optString("message", "")
                     val sheetUsed = respJson.optString("sheetUsed", "")
                     val row = respJson.optInt("row", -1)
+                    val existingRow = respJson.optInt("existingRow", if (row > 0) row else -1)
+                    val existingSummary = respJson.optString("existingSummary", "")
                     val sheetsList = mutableListOf<String>()
                     val arr = respJson.optJSONArray("availableSheets")
                     if (arr != null) {
@@ -357,15 +366,20 @@ class AttendanceRepository(
                         }
                     }
 
+                    val isDuplicate = status == "warning_duplicate_entry" ||
+                            code == "DUPLICATE_ENTRY" ||
+                            status == "duplicate_found"
+
                     val isNotFound = status == "warning_sheet_not_found" ||
                             code == "SHEET_NOT_FOUND" ||
                             status == "discarded" ||
-                            status == "warning"
+                            (status == "warning" && !isDuplicate)
 
                     val isSuccess = status == "success"
 
                     val returnMessage = when {
                         msg.isNotBlank() -> msg
+                        isDuplicate -> "Já existe uma aula registada para este evento/turma nesta data (linha $existingRow)."
                         isNotFound -> "Aba '$sheetName' não encontrada no Google Sheets. Por favor confirme ou altere o nome da turma na app."
                         isSuccess -> "Registado com sucesso na aba '$sheetUsed'"
                         else -> "Resposta recebida: $status"
@@ -376,9 +390,12 @@ class AttendanceRepository(
                         status = status,
                         message = returnMessage,
                         isSheetNotFound = isNotFound,
+                        isDuplicateEntry = isDuplicate,
                         availableSheets = sheetsList,
-                        targetRow = row,
-                        sheetUsed = sheetUsed.ifBlank { sheetName }
+                        targetRow = if (row > 0) row else existingRow,
+                        sheetUsed = sheetUsed.ifBlank { sheetName },
+                        existingRow = existingRow,
+                        existingSummary = existingSummary
                     )
                 } catch (e: Exception) {
                     SheetSyncResponse(

@@ -558,6 +558,105 @@ fun AttendanceScreen(
             }
         )
     }
+
+    // Duplicate Entry Warning Dialog
+    val duplicateWarning = uiState.duplicateWarning
+    if (duplicateWarning != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDuplicateWarning() },
+            modifier = Modifier.testTag("dialog_duplicate_entry_warning"),
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "⚠️ Aula Já Registada Nesta Data",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = duplicateWarning.message.ifBlank {
+                            "Já existe um registo para '${duplicateWarning.schoolOrName}' na data ${duplicateWarning.date} (linha ${duplicateWarning.existingRow}) no Google Sheets."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Para evitar duplicações acidentais, escolha se deseja atualizar a linha existente ou criar uma nova linha.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "Turma / Aba: ${duplicateWarning.schoolOrName}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Data: ${duplicateWarning.date}",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                            if (duplicateWarning.existingRow > 1) {
+                                Text(
+                                    text = "Linha na folha: #${duplicateWarning.existingRow}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { viewModel.resolveDuplicateWithNewRow(duplicateWarning) },
+                        modifier = Modifier.testTag("btn_duplicate_create_new")
+                    ) {
+                        Text("Criar Nova Linha")
+                    }
+                    Button(
+                        onClick = { viewModel.resolveDuplicateWithUpdate(duplicateWarning) },
+                        modifier = Modifier.testTag("btn_duplicate_update_existing")
+                    ) {
+                        Text("Atualizar Existente")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.dismissDuplicateWarning() },
+                    modifier = Modifier.testTag("btn_duplicate_dismiss")
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 }
 
 @Composable

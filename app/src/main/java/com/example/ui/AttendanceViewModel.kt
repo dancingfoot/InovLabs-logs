@@ -36,6 +36,21 @@ data class SheetNotFoundWarning(
     val availableSheets: List<String> = emptyList()
 )
 
+data class DuplicateEntryWarning(
+    val eventId: Long,
+    val schoolOrName: String,
+    val date: String,
+    val message: String,
+    val existingRow: Int,
+    val existingSummary: String = "",
+    val sumario: String = "",
+    val minutos: Int = 90,
+    val obs: String = "",
+    val sheetName: String = "",
+    val customDate: String = "",
+    val docente: String = ""
+)
+
 data class AttendanceUiState(
     val calendars: List<CalendarInfo> = emptyList(),
     val selectedCalendarId: Long? = null,
@@ -63,6 +78,7 @@ data class AttendanceUiState(
     val dailyDigestMinute: Int = 0,
     val hasNotificationPermission: Boolean = false,
     val sheetNotFoundWarning: SheetNotFoundWarning? = null,
+    val duplicateWarning: DuplicateEntryWarning? = null,
     val availableSheets: List<String> = emptyList()
 )
 
@@ -322,7 +338,46 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
 
-        if (sync.isSheetNotFound) {
+        if (sync.isDuplicateEntry) {
+            val schoolDisplay = sync.sheetUsed.ifBlank { attemptedSheetName.ifBlank { "Turma" } }
+            val event = _uiState.value.todayEvents.find { it.id == eventId }
+            val dateStr = if (event != null && event.startTimeMillis > 0) {
+                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(event.startTimeMillis))
+            } else {
+                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+            }
+
+            NotificationHelper.showDuplicateEntryNotification(
+                context = getApplication(),
+                eventId = eventId,
+                schoolOrName = schoolDisplay,
+                date = dateStr,
+                message = sync.message
+            )
+
+            val durationMins = if (event != null) {
+                ((event.endTimeMillis - event.startTimeMillis) / (60 * 1000)).toInt().coerceIn(15, 240)
+            } else 90
+
+            _uiState.value = _uiState.value.copy(
+                todayEvents = refreshed,
+                duplicateWarning = DuplicateEntryWarning(
+                    eventId = eventId,
+                    schoolOrName = schoolDisplay,
+                    date = dateStr,
+                    message = sync.message,
+                    existingRow = sync.existingRow,
+                    existingSummary = sync.existingSummary,
+                    sumario = record.sumario.ifBlank { event?.title ?: "" },
+                    minutos = durationMins,
+                    obs = record.obs,
+                    sheetName = attemptedSheetName,
+                    customDate = dateStr,
+                    docente = _uiState.value.docenteName
+                ),
+                snackbarMessage = "⚠️ Entrada já existente nesta data. Notificação enviada!"
+            )
+        } else if (sync.isSheetNotFound) {
             val updatedSheets = if (sync.availableSheets.isNotEmpty()) {
                 (sync.availableSheets + _uiState.value.availableSheets).distinct()
             } else {
@@ -350,6 +405,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 todayEvents = refreshed,
                 availableSheets = updatedSheets,
                 sheetNotFoundWarning = null,
+                duplicateWarning = null,
                 snackbarMessage = "✓ Registada com sucesso na aba '${sync.sheetUsed}'$rowMsg!"
             )
         } else {
@@ -358,6 +414,42 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 snackbarMessage = "⚠️ Guardada localmente, mas falhou envio: ${sync.message}"
             )
         }
+    }
+
+    fun dismissDuplicateWarning() {
+        _uiState.value = _uiState.value.copy(duplicateWarning = null)
+    }
+
+    fun resolveDuplicateWithUpdate(warning: DuplicateEntryWarning) {
+        val event = _uiState.value.todayEvents.find { it.id == warning.eventId } ?: return
+        dismissDuplicateWarning()
+        commitEditedEvent(
+            event = event,
+            sumario = warning.sumario.ifBlank { CalendarRepository.extractClassSummary(event.title) },
+            minutos = warning.minutos,
+            obs = warning.obs,
+            sheetName = warning.sheetName,
+            customDate = warning.customDate,
+            docente = warning.docente.ifBlank { _uiState.value.docenteName },
+            allowDuplicate = false,
+            forceUpdate = true
+        )
+    }
+
+    fun resolveDuplicateWithNewRow(warning: DuplicateEntryWarning) {
+        val event = _uiState.value.todayEvents.find { it.id == warning.eventId } ?: return
+        dismissDuplicateWarning()
+        commitEditedEvent(
+            event = event,
+            sumario = warning.sumario.ifBlank { CalendarRepository.extractClassSummary(event.title) },
+            minutos = warning.minutos,
+            obs = warning.obs,
+            sheetName = warning.sheetName,
+            customDate = warning.customDate,
+            docente = warning.docente.ifBlank { _uiState.value.docenteName },
+            allowDuplicate = true,
+            forceUpdate = false
+        )
     }
 
     fun dismissSheetNotFoundWarning() {
@@ -486,9 +578,10 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         sheetName: String,
         customDate: String,
         docente: String,
-        allowDuplicate: Boolean = false
+        allowDuplicate: Boolean = false,
+        forceUpdate: Boolean = false
     ) {
-        saveEditedEvent(event, sumario, minutos, obs, sheetName, customDate, docente, allowDuplicate)
+        saveEditedEvent(event, sumario, minutos, obs, sheetName, customDate, docente, allowDuplicate, forceUpdate)
     }
 
     fun saveEditedEvent(
@@ -499,7 +592,8 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         sheetName: String,
         customDate: String,
         docente: String,
-        allowDuplicate: Boolean = false
+        allowDuplicate: Boolean = false,
+        forceUpdate: Boolean = false
     ) {
         val targetSheet = sheetName.ifBlank { event.schoolName.ifBlank { event.title } }
 
@@ -515,6 +609,8 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             activePromptEvent = null,
             snackbarMessage = if (allowDuplicate) {
                 "✓ Nova linha (duplicado) guardada na aba '$targetSheet'"
+            } else if (forceUpdate) {
+                "✓ Linha existente atualizada na aba '$targetSheet'"
             } else {
                 "✓ Aula guardada na aba '$targetSheet' (sem duplicados)"
             }
@@ -540,7 +636,8 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 eventTitle = event.title,
                 customDate = eventDateStr,
                 eventDateMillis = event.startTimeMillis,
-                allowDuplicate = allowDuplicate
+                allowDuplicate = allowDuplicate,
+                forceUpdate = forceUpdate
             )
             handleSyncResult(event.id, targetSheet, result)
         }
