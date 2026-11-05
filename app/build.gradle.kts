@@ -18,8 +18,8 @@ android {
 
   val versionMajor = 1
   val versionMinor = 0
-  val versionPatch = 5
-  val versionBuild = 6
+  val versionPatch = 7
+  val versionBuild = 8
   val appVersionName = "$versionMajor.$versionMinor.$versionPatch"
   val appVersionCode = versionBuild
 

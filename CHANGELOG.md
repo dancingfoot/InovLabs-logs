@@ -1,5 +1,28 @@
 # Registo de Versões (Changelog)
 
+## [1.0.7] - 2026-10-30
+
+### Destaques & Correções Principais
+- **Inserção Física de Nova Linha (`sheet.insertRowAfter`)**:
+  - Em vez de apenas procurar a linha seguinte vazia, o Google Apps Script agora executa uma inserção física explícita de uma nova linha (`sheet.insertRowAfter(lastRow)`).
+  - Garante a 100% que **NUNCA** substitui, edita ou sobrescreve uma linha criada anteriormente.
+  - Qualquer dado existente abaixo é automaticamente deslocado para baixo pela folha de cálculo.
+- **Incremento de Versão**:
+  - Atualizado para a versão **1.0.7** (Build 8).
+
+## [1.0.6] - 2026-10-30
+
+### Destaques & Correções Principais
+- **Garantia Total de Nova Linha (Row) no Google Sheets**:
+  - Eliminado todo o código excessivo e desnecessário de pesquisa de linhas vazias intermédias e deteção conflituosa de duplicados que causava a substituição involuntária de linhas no início da folha.
+  - Ao adicionar uma aula, o script agora cria **SEMPRE** uma nova linha no final da folha (`targetRow = Math.max(lastRow + 1, 2)`), garantindo que **nunca substitui nenhuma linha existente**.
+  - Suporte automático para expandir a folha (`sheet.insertRowAfter`) caso o número de linhas exceda o limite.
+- **Simplificação e Otimização do Google Apps Script**:
+  - Script totalmente refatorizado, leve, ultrarrápido e sem dependências complexas.
+  - Correspondência robusta de abas (tolerante a maiúsculas/minúsculas e acentuação).
+- **Incremento de Versão**:
+  - Atualizado para a versão **1.0.6** (Build 7).
+
 ## [1.0.5] - 2026-10-28
 
 ### Destaques & Correções Principais
