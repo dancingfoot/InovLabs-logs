@@ -133,14 +133,15 @@ function getLastUsedLessonRow(sheet) {
   var maxCols = sheet.getMaxColumns();
   if (maxRows <= 1 || maxCols < 2) return 1;
 
-  // Inspecionar da Coluna 2 (B) à 7 (G) ou última coluna
+  // Inspecionar da Coluna 2 (B) até à 7 (G) ou última coluna existente
   var colsToCheck = Math.max(Math.min(maxCols - 1, 6), 1);
-  var numRowsToCheck = Math.min(sheet.getLastRow() + 10, maxRows);
+  // Verificar todas as linhas até ao máximo da folha (ou até 1000 linhas)
+  var numRowsToCheck = Math.min(maxRows, 1000);
   if (numRowsToCheck <= 1) return 1;
 
   var rangeValues = sheet.getRange(1, 2, numRowsToCheck, colsToCheck).getValues();
 
-  // Percorre de baixo para cima à procura da última linha com conteúdo nas colunas B..G
+  // Percorre de baixo para cima à procura da última linha com conteúdo real nas colunas B..G
   for (var r = rangeValues.length - 1; r >= 1; r--) { // r=0 é a linha 1 (cabeçalhos)
     var row = rangeValues[r];
     for (var c = 0; c < row.length; c++) {

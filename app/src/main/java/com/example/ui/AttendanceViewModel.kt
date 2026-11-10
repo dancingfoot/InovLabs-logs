@@ -103,7 +103,8 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             isDailyDigestEnabled = attendanceRepo.isDailyDigestEnabled(),
             dailyDigestHour = attendanceRepo.getDailyDigestHour(),
             dailyDigestMinute = attendanceRepo.getDailyDigestMinute(),
-            hasNotificationPermission = NotificationHelper.hasNotificationPermission(application)
+            hasNotificationPermission = NotificationHelper.hasNotificationPermission(application),
+            hasCalendarPermission = calendarRepo.hasCalendarPermission()
         )
     )
     val uiState: StateFlow<AttendanceUiState> = _uiState.asStateFlow()
@@ -607,12 +608,10 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.value = _uiState.value.copy(
             todayEvents = updated,
             activePromptEvent = null,
-            snackbarMessage = if (allowDuplicate) {
-                "✓ Nova linha (duplicado) guardada na aba '$targetSheet'"
-            } else if (forceUpdate) {
-                "✓ Linha existente atualizada na aba '$targetSheet'"
+            snackbarMessage = if (forceUpdate) {
+                "✓ Registo atualizado na aba '$targetSheet'"
             } else {
-                "✓ Aula guardada na aba '$targetSheet' (sem duplicados)"
+                "✓ Aula guardada (será criada nova linha na aba '$targetSheet')"
             }
         )
 

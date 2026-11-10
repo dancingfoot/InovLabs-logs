@@ -20,8 +20,18 @@ class CalendarRepository(private val context: Context) {
 
     private val contentResolver: ContentResolver = context.contentResolver
 
+    fun hasCalendarPermission(): Boolean {
+        return androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.READ_CALENDAR
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
     suspend fun getDeviceCalendars(): List<CalendarInfo> = withContext(Dispatchers.IO) {
         val calendars = mutableListOf<CalendarInfo>()
+        if (!hasCalendarPermission()) {
+            return@withContext calendars
+        }
         val uri: Uri = CalendarContract.Calendars.CONTENT_URI
         val projection = arrayOf(
             CalendarContract.Calendars._ID,
@@ -80,6 +90,9 @@ class CalendarRepository(private val context: Context) {
 
     suspend fun getEventsForDate(calendarId: Long?, dateMillis: Long): List<ClassEvent> = withContext(Dispatchers.IO) {
         val events = mutableListOf<ClassEvent>()
+        if (!hasCalendarPermission()) {
+            return@withContext events
+        }
 
         val calendar = Calendar.getInstance().apply {
             timeInMillis = dateMillis
@@ -259,6 +272,13 @@ class CalendarRepository(private val context: Context) {
         calendarId: Long,
         dateMillis: Long = System.currentTimeMillis()
     ): Long = withContext(Dispatchers.IO) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.WRITE_CALENDAR
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            return@withContext -1L
+        }
         val cal = Calendar.getInstance().apply {
             timeInMillis = dateMillis
             set(Calendar.HOUR_OF_DAY, startHour)

@@ -289,28 +289,28 @@ fun AttendancePromptDialog(
                 // Add Duplicate Option
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = if (allowDuplicate) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { allowDuplicate = !allowDuplicate }
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Checkbox(
-                            checked = allowDuplicate,
-                            onCheckedChange = { allowDuplicate = it },
-                            modifier = Modifier.testTag("checkbox_allow_duplicate")
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(18.dp)
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Permitir duplicado (nova linha na folha)",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
+                                text = "Garantia de Nova Linha no Sheets",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFF1B5E20)
                             )
                             Text(
-                                text = if (allowDuplicate) "Será criada uma nova linha mesmo que já exista uma aula nesta data." else "Por defeito, atualiza a linha existente sem criar duplicados.",
+                                text = "Cada nova aula submetida insere sempre uma nova linha física na folha (ignora a coluna A), nunca substituindo registos existentes.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -366,32 +366,7 @@ fun AttendancePromptDialog(
                     }
                 }
 
-                // Anti-Duplicate Guarantee Banner
-                if (!allowDuplicate) {
-                    Surface(
-                        color = Color(0xFFE8F5E9),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = Color(0xFF2E7D32),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = "Sem duplicados: Se já existir registo desta aula na folha, este será atualizado sem criar uma nova linha.",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = Color(0xFF1B5E20)
-                            )
-                        }
-                    }
-                }
+
                 // Save vs Commit Info Note
                 Surface(
                     shape = RoundedCornerShape(8.dp),

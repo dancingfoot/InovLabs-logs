@@ -1,5 +1,19 @@
 # Registo de Versões (Changelog)
 
+## [1.0.9] - 2026-11-10
+
+### Destaques & Correções Principais
+- **Inspeção Completa de Linhas no Sheets (`getLastUsedLessonRow`)**:
+  - A pesquisa da última linha foi expandida para inspecionar todas as linhas da folha (até 1000 linhas) de baixo para cima, eliminando qualquer dependência de `sheet.getLastRow()`.
+  - A Coluna A ("Nº Aula") permanece 100% ignorada, prevenindo que números pré-existentes de linhas afetem a posição da nova aula.
+  - Inserção física garantida através de `sheet.insertRowAfter(lastUsedRow)`.
+- **Correção da Pipeline CI/CD GitHub Actions (`release.yml`)**:
+  - Resolvido o erro `:app:validateSigningDebug FAILED` no GitHub Actions ao compilar o APK.
+  - Implementada recuperação e geração automática via `keytool` para runners do GitHub caso a keystore não esteja presente.
+- **Incremento de Versão**:
+  - Atualizado para a versão **1.0.9** (Build 10).
+  - Novos APKs gerados: `InovLabs_logs-v1.0.9.apk` e `InovLabs_logs.apk`.
+
 ## [1.0.8] - 2026-11-05
 
 ### Destaques & Correções Principais

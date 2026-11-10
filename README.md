@@ -1,7 +1,7 @@
 # InovLabs_logs
 
-[![Versão](https://img.shields.io/badge/versão-v1.0.8-00A4E4.svg)](CHANGELOG.md)
-[![Build](https://img.shields.io/badge/build-9-8DC63F.svg)](CHANGELOG.md)
+[![Versão](https://img.shields.io/badge/versão-v1.0.9-00A4E4.svg)](CHANGELOG.md)
+[![Build](https://img.shields.io/badge/build-10-8DC63F.svg)](CHANGELOG.md)
 [![Android](https://img.shields.io/badge/Android-7.0%2B-green.svg)](https://developer.android.com)
 [![GitHub Actions](https://img.shields.io/badge/CI%2FCD-Auto%20Release%20on%20Commit-blue.svg)]()
 [![Licença](https://img.shields.io/badge/licença-Proprietária-lightgrey.svg)]()
@@ -14,8 +14,8 @@ Aplicação Android desenvolvida em **Kotlin** e **Jetpack Compose** para docent
 
 | Ficheiro | Versão | Build | Descrição |
 | :--- | :---: | :---: | :--- |
-| **[`apk/InovLabs_logs-v1.0.8.apk`](apk/InovLabs_logs-v1.0.8.apk)** | `1.0.8` | `9` | APK versionado com as funcionalidades mais recentes. |
-| **[`apk/InovLabs_logs.apk`](apk/InovLabs_logs.apk)** | `1.0.8` | `9` | APK estável com link fixo para atualizações diretas. |
+| **[`apk/InovLabs_logs-v1.0.9.apk`](apk/InovLabs_logs-v1.0.9.apk)** | `1.0.9` | `10` | APK versionado com as funcionalidades mais recentes. |
+| **[`apk/InovLabs_logs.apk`](apk/InovLabs_logs.apk)** | `1.0.9` | `10` | APK estável com link fixo para atualizações diretas. |
 
 Também disponível através dos [GitHub Releases](../../releases) com **compilação e publicação automática a cada commit** ou tag (`v*`).
 
@@ -27,14 +27,14 @@ A aplicação segue estritamente a convenção **Semantic Versioning (SemVer)**:
 
 * **`MAJOR` (1)**: Alterações estruturais ou incompatibilidades de dados/API.
 * **`MINOR` (0)**: Novas funcionalidades com retrocompatibilidade (ex: novos diálogos, sistemas de alarme).
-* **`PATCH` (8)**: Correções de erros e otimizações.
-* **`BUILD` (9)**: Código incremental único (`versionCode`) para controlo de atualizações no Android OS.
+* **`PATCH` (9)**: Correções de erros e otimizações.
+* **`BUILD` (10)**: Código incremental único (`versionCode`) para controlo de atualizações no Android OS.
 
 ### Onde a Versão é Exibida
-1. **Interface Principal (TopBar)**: Badge dinâmico `v1.0.8` junto ao logótipo oficial InovLabs.
+1. **Interface Principal (TopBar)**: Badge dinâmico `v1.0.9` junto ao logótipo oficial InovLabs.
 2. **Definições da Aplicação**: Cartão informativo com a versão instalada, número de build e data/hora de compilação obtidos diretamente do `BuildConfig`.
 3. **Visualizador de Changelog na App**: Botão "Changelog" nas Definições para consultar as novidades de cada versão sem sair da aplicação.
-4. **Ficheiro APK**: Nomenclatura automática dos artefactos gerados: `InovLabs_logs-v1.0.8.apk`.
+4. **Ficheiro APK**: Nomenclatura automática dos artefactos gerados: `InovLabs_logs-v1.0.9.apk`.
 5. **Documentação**: Badges e registo de alterações em `README.md` e `CHANGELOG.md`.
 
 ---

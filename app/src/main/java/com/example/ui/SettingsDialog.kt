@@ -217,7 +217,7 @@ function getLastUsedLessonRow(sheet) {
   if (maxRows <= 1 || maxCols < 2) return 1;
 
   var colsToCheck = Math.max(Math.min(maxCols - 1, 6), 1);
-  var numRowsToCheck = Math.min(sheet.getLastRow() + 10, maxRows);
+  var numRowsToCheck = Math.min(maxRows, 1000);
   if (numRowsToCheck <= 1) return 1;
 
   var rangeValues = sheet.getRange(1, 2, numRowsToCheck, colsToCheck).getValues();

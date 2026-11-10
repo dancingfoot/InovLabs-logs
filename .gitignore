@@ -16,3 +16,12 @@
 local.properties
 .env
 debug.keystore
+
+# Build outputs and large binaries
+/.build-outputs/
+.build-outputs/
+/apk/
+apk/
+*.apk
+*.aab
+*.jks

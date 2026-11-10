@@ -14,8 +14,8 @@ plugins {
 
 val versionMajor = 1
 val versionMinor = 0
-val versionPatch = 8
-val versionBuild = 9
+val versionPatch = 9
+val versionBuild = 10
 val appVersionName = "$versionMajor.$versionMinor.$versionPatch"
 val appVersionCode = versionBuild
 
@@ -87,7 +87,7 @@ tasks.register<Copy>("copyVersionedApk") {
   from(layout.buildDirectory.dir("outputs/apk/debug"))
   include("*.apk")
   into(layout.projectDirectory.dir("../apk"))
-  rename(".*", "InovLabs_logs-v1.0.8.apk")
+  rename(".*", "InovLabs_logs-v1.0.9.apk")
 }
 
 tasks.register<Copy>("copyDefaultApk") {
