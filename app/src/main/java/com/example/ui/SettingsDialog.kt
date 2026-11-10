@@ -120,7 +120,7 @@ function doGet(e) {
     var sheets = ss.getSheets().map(function(s) { return s.getName(); });
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
-      version: "1.0.7",
+      version: "1.0.8",
       availableSheets: sheets
     })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
@@ -169,18 +169,24 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    var lastRow = sheet.getLastRow();
-    if (lastRow === 0) {
+    if (sheet.getLastRow() === 0) {
       sheet.appendRow(["Nº Aula", "Docente InovLabs", "Professor Escola", "Data", "Sumário", "Minutos", "Obs"]);
-      lastRow = 1;
     }
 
-    // Criação de nova linha física: insere sempre uma nova linha no sheet
-    sheet.insertRowAfter(lastRow);
-    var newRow = lastRow + 1;
+    // IGNORAR COLUNA A ("Nº Aula") ao determinar a última linha usada
+    var lastUsedRow = getLastUsedLessonRow(sheet);
 
-    sheet.getRange(newRow, 1, 1, 7).setValues([[
-      data.lessonNumber || "",
+    // INSERIR SEMPRE UMA NOVA LINHA FÍSICA NO SHEET
+    sheet.insertRowAfter(lastUsedRow);
+    var targetRow = lastUsedRow + 1;
+
+    var lessonNum = parseInt(data.lessonNumber, 10);
+    if (!lessonNum || isNaN(lessonNum) || lessonNum <= 0) {
+      lessonNum = targetRow - 1;
+    }
+
+    sheet.getRange(targetRow, 1, 1, 7).setValues([[
+      lessonNum,
       data.docenteInovLabs || "",
       data.professorEscola || sheet.getName(),
       data.data || data.date || "",
@@ -192,7 +198,7 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
       sheetUsed: sheet.getName(),
-      row: newRow,
+      row: targetRow,
       createdNewRow: true,
       availableSheets: availableSheetNames
     })).setMimeType(ContentService.MimeType.JSON);
@@ -203,6 +209,30 @@ function doPost(e) {
       message: err.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+function getLastUsedLessonRow(sheet) {
+  var maxRows = sheet.getMaxRows();
+  var maxCols = sheet.getMaxColumns();
+  if (maxRows <= 1 || maxCols < 2) return 1;
+
+  var colsToCheck = Math.max(Math.min(maxCols - 1, 6), 1);
+  var numRowsToCheck = Math.min(sheet.getLastRow() + 10, maxRows);
+  if (numRowsToCheck <= 1) return 1;
+
+  var rangeValues = sheet.getRange(1, 2, numRowsToCheck, colsToCheck).getValues();
+
+  for (var r = rangeValues.length - 1; r >= 1; r--) {
+    var row = rangeValues[r];
+    for (var c = 0; c < row.length; c++) {
+      var val = row[c];
+      if (val !== null && val !== undefined && String(val).trim() !== "") {
+        return r + 1;
+      }
+    }
+  }
+
+  return 1;
 }
 
 function findSheet(sheets, targetName) {

@@ -1,5 +1,20 @@
 # Registo de Versões (Changelog)
 
+## [1.0.8] - 2026-11-05
+
+### Destaques & Correções Principais
+- **Ignorar Completamente a Coluna A ("Nº Aula") ao Calcular a Última Linha Usada**:
+  - A primeira coluna ("Nº Aula") contém frequentemente números pré-preenchidos (ex: 1 a 50), fórmulas ou dados arbitrários que faziam com que o script calculasse a linha errada ou substituísse linhas já preenchidas.
+  - Implementada a função `getLastUsedLessonRow(sheet)` que analisa exclusivamente as Colunas B a G (Docente InovLabs, Professor Escola, Data, Sumário, Minutos, Obs).
+  - A Coluna A é estritamente ignorada para a determinação da última linha com aula registada.
+- **Criação Sempre de Nova Linha Física (`sheet.insertRowAfter`)**:
+  - Cada nova aula inserida cria fisicamente uma nova linha na folha de cálculo através de `sheet.insertRowAfter(lastUsedRow)`.
+  - Garante a 100% que nenhuma aula é alguma vez colocada por cima de outra existente ou de uma linha com conteúdo anterior.
+- **Incremento de Versão**:
+  - Atualizado para a versão **1.0.8** (Build 9).
+  - Script Google Apps Script atualizado e sincronizado na aplicação e em `google-apps-script/Code.gs`.
+  - GitHub Actions configurado para compilar e publicar automaticamente os releases a cada commit.
+
 ## [1.0.7] - 2026-10-30
 
 ### Destaques & Correções Principais

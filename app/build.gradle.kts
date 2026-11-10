@@ -12,16 +12,16 @@ plugins {
   alias(libs.plugins.google.services)
 }
 
+val versionMajor = 1
+val versionMinor = 0
+val versionPatch = 8
+val versionBuild = 9
+val appVersionName = "$versionMajor.$versionMinor.$versionPatch"
+val appVersionCode = versionBuild
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
-
-  val versionMajor = 1
-  val versionMinor = 0
-  val versionPatch = 7
-  val versionBuild = 8
-  val appVersionName = "$versionMajor.$versionMinor.$versionPatch"
-  val appVersionCode = versionBuild
 
   defaultConfig {
     applicationId = "com.aistudio.classtracker.vymz"
@@ -87,9 +87,7 @@ tasks.register<Copy>("copyVersionedApk") {
   from(layout.buildDirectory.dir("outputs/apk/debug"))
   include("*.apk")
   into(layout.projectDirectory.dir("../apk"))
-  rename { _ ->
-    "InovLabs_logs-v1.0.3.apk"
-  }
+  rename(".*", "InovLabs_logs-v1.0.8.apk")
 }
 
 tasks.register<Copy>("copyDefaultApk") {
@@ -97,9 +95,7 @@ tasks.register<Copy>("copyDefaultApk") {
   from(layout.buildDirectory.dir("outputs/apk/debug"))
   include("*.apk")
   into(layout.projectDirectory.dir("../apk"))
-  rename { _ ->
-    "InovLabs_logs.apk"
-  }
+  rename(".*", "InovLabs_logs.apk")
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files

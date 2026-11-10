@@ -1,23 +1,27 @@
 name: Build & Release APK
 
 on:
-  release:
-    types: [published, created]
   push:
+    branches:
+      - '**' # Executa em todos os commits enviados para qualquer branch (main, master, etc.)
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v*' # Executa quando é criada uma tag de versão
+  workflow_dispatch: # Permite executar manualmente no separador Actions do GitHub
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   build-and-release:
+    name: Compilar APK e Publicar Release
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -40,23 +44,61 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon
 
-      - name: Prepare APK Artifact
+      - name: Prepare APK Artifacts and Metadata
+        id: meta
         run: |
           mkdir -p release-artifacts
           APK_FILE=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
-          cp "$APK_FILE" release-artifacts/InovLabs_logs.apk
-          cp "$APK_FILE" release-artifacts/InovLabs_logs-v1.0.3.apk
+          
+          if [ -z "$APK_FILE" ]; then
+            echo "Erro: Ficheiro APK não encontrado!" >&2
+            exit 1
+          fi
+          
+          VERSION=$(grep "val appVersionName" app/build.gradle.kts | head -n 1 | cut -d'"' -f2 || echo "1.0.7")
+          BUILD=$(grep "val versionBuild" app/build.gradle.kts | head -n 1 | awk '{print $NF}' || echo "${{ github.run_number }}")
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          
+          cp "$APK_FILE" "release-artifacts/InovLabs_logs.apk"
+          cp "$APK_FILE" "release-artifacts/InovLabs_logs-v${VERSION}.apk"
+          
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+            TITLE="Release $TAG"
+          else
+            TAG="v${VERSION}-b${BUILD}-${SHORT_SHA}"
+            TITLE="InovLabs Logs v${VERSION} (${SHORT_SHA})"
+          fi
+          
+          echo "TAG_NAME=$TAG" >> $GITHUB_ENV
+          echo "RELEASE_TITLE=$TITLE" >> $GITHUB_ENV
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
 
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
         with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.RELEASE_TITLE }}
+          body: |
+            ## 📱 InovLabs Logs v${{ env.APP_VERSION }}
+            
+            - **Commit**: `${{ env.SHORT_SHA }}` ([${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}))
+            - **Branch**: `${{ github.ref_name }}`
+            - **Compilação**: GitHub Actions Run #${{ github.run_number }}
+            
+            ### ⬇️ Ficheiros APK para Instalação no Android:
+            - **`InovLabs_logs.apk`**: APK pronto a instalar (sempre com o nome padrão)
+            - **`InovLabs_logs-v${{ env.APP_VERSION }}.apk`**: APK com versão indicada
           files: release-artifacts/*.apk
+          draft: false
+          prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Artifact (Download from Actions tab)
+      - name: Upload Artifact (Download direto no separador Actions)
         uses: actions/upload-artifact@v4
         with:
-          name: InovLabs_logs-apk
+          name: InovLabs_logs-apk-${{ env.SHORT_SHA }}
           path: release-artifacts/*.apk

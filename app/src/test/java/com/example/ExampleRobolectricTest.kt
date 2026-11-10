@@ -28,12 +28,12 @@ class ExampleRobolectricTest {
 
     @Test
     fun `verify build config versioning system fields`() {
-        assertEquals("1.0.7", BuildConfig.VERSION_NAME)
-        assertEquals(8, BuildConfig.VERSION_CODE)
+        assertEquals("1.0.8", BuildConfig.VERSION_NAME)
+        assertEquals(9, BuildConfig.VERSION_CODE)
         assertEquals(1, BuildConfig.VERSION_MAJOR)
         assertEquals(0, BuildConfig.VERSION_MINOR)
-        assertEquals(7, BuildConfig.VERSION_PATCH)
-        assertEquals(8, BuildConfig.VERSION_BUILD)
+        assertEquals(8, BuildConfig.VERSION_PATCH)
+        assertEquals(9, BuildConfig.VERSION_BUILD)
         assertTrue(BuildConfig.BUILD_TIME.isNotBlank())
     }
 

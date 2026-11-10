@@ -1,11 +1,13 @@
 /**
  * InovLabs_logs - Google Sheets Webhook (Google Apps Script)
- * Versão: 1.0.7
+ * Versão: 1.0.8
  *
- * REGRA PRINCIPAL:
- * Cria SEMPRE uma nova linha física (sheet.insertRowAfter), inserindo uma nova
- * Row no sheet para garantir que NUNCA escreve por cima de nada já criado anteriormente.
- * A Linha 1 é estritamente protegida para os cabeçalhos.
+ * REGRAS PRINCIPAIS:
+ * 1. A Coluna A ("Nº Aula") é TOTALMENTE IGNORADA para determinar a última linha usada.
+ *    (Apenas as colunas B a G com dados reais de aulas são tidas em conta).
+ * 2. Ao adicionar uma nova aula, CRIA SEMPRE UMA NOVA LINHA FÍSICA (sheet.insertRowAfter).
+ *    Garante a 100% que NUNCA é posto nada por cima de uma aula já existente.
+ * 3. A Linha 1 é estritamente protegida para os cabeçalhos.
  *
  * INSTRUÇÕES:
  * 1. Abra a sua folha de cálculo no Google Sheets no computador.
@@ -21,7 +23,7 @@ function doGet(e) {
     var sheets = ss.getSheets().map(function(s) { return s.getName(); });
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
-      version: "1.0.7",
+      version: "1.0.8",
       availableSheets: sheets
     })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
@@ -51,7 +53,7 @@ function doPost(e) {
     var targetName = (data.sheetName || data.schoolName || data.professorEscola || data.tabName || data.eventTitle || "").toString().trim();
     var sheet = findSheet(allSheets, targetName);
 
-    // Se não existir aba correspondente: não cria aba desconhecida, avisa a app
+    // Se não existir aba correspondente: avisa a app
     if (!sheet) {
       return ContentService.createTextOutput(JSON.stringify({
         status: "warning_sheet_not_found",
@@ -75,21 +77,27 @@ function doPost(e) {
     }
 
     // 3. Garantir cabeçalhos na Linha 1 se a folha estiver vazia
-    var lastRow = sheet.getLastRow();
-    if (lastRow === 0) {
+    if (sheet.getLastRow() === 0) {
       sheet.appendRow(["Nº Aula", "Docente InovLabs", "Professor Escola", "Data", "Sumário", "Minutos", "Obs"]);
-      lastRow = 1;
     }
 
-    // 4. CRIAÇÃO DE NOVA LINHA FÍSICA NO SHEET
-    // Inserção explícita de uma nova linha (sheet.insertRowAfter):
-    // Garante a 100% que NUNCA substitui nem escreve por cima de nada existente.
-    sheet.insertRowAfter(lastRow);
-    var newRow = lastRow + 1;
+    // 4. DETERMINAR A ÚLTIMA LINHA UTILIZADA (IGNORANDO COMPLETAMENTE A COLUNA A "Nº Aula")
+    var lastUsedRow = getLastUsedLessonRow(sheet);
 
-    // Escrever os dados na nova linha criada
-    sheet.getRange(newRow, 1, 1, 7).setValues([[
-      data.lessonNumber || "",
+    // 5. CRIAR SEMPRE UMA NOVA LINHA FÍSICA NO SHEET
+    // Inserir uma nova linha física limpa logo após a última aula registada
+    sheet.insertRowAfter(lastUsedRow);
+    var targetRow = lastUsedRow + 1;
+
+    // Determinar o número da aula
+    var lessonNum = parseInt(data.lessonNumber, 10);
+    if (!lessonNum || isNaN(lessonNum) || lessonNum <= 0) {
+      lessonNum = targetRow - 1; // Ex: na linha 2 é a aula 1, na linha 3 é a aula 2
+    }
+
+    // 6. Escrever os dados na nova linha criada (nunca escreve por cima de nada)
+    sheet.getRange(targetRow, 1, 1, 7).setValues([[
+      lessonNum,
       data.docenteInovLabs || "",
       data.professorEscola || sheet.getName(),
       data.data || data.date || "",
@@ -101,7 +109,7 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
       sheetUsed: sheet.getName(),
-      row: newRow,
+      row: targetRow,
       createdNewRow: true,
       availableSheets: availableSheetNames
     })).setMimeType(ContentService.MimeType.JSON);
@@ -112,6 +120,38 @@ function doPost(e) {
       message: err.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+/**
+ * Encontra a última linha que contém uma aula real.
+ * REGRA CRÍTICA: A Coluna A ("Nº Aula") é TOTALMENTE IGNORADA, pois pode conter
+ * números aleatórios, fórmulas ou contadores pré-preenchidos.
+ * Verifica apenas as colunas B até G (Docente, Escola, Data, Sumário, Minutos, Obs).
+ */
+function getLastUsedLessonRow(sheet) {
+  var maxRows = sheet.getMaxRows();
+  var maxCols = sheet.getMaxColumns();
+  if (maxRows <= 1 || maxCols < 2) return 1;
+
+  // Inspecionar da Coluna 2 (B) à 7 (G) ou última coluna
+  var colsToCheck = Math.max(Math.min(maxCols - 1, 6), 1);
+  var numRowsToCheck = Math.min(sheet.getLastRow() + 10, maxRows);
+  if (numRowsToCheck <= 1) return 1;
+
+  var rangeValues = sheet.getRange(1, 2, numRowsToCheck, colsToCheck).getValues();
+
+  // Percorre de baixo para cima à procura da última linha com conteúdo nas colunas B..G
+  for (var r = rangeValues.length - 1; r >= 1; r--) { // r=0 é a linha 1 (cabeçalhos)
+    var row = rangeValues[r];
+    for (var c = 0; c < row.length; c++) {
+      var val = row[c];
+      if (val !== null && val !== undefined && String(val).trim() !== "") {
+        return r + 1; // Linha real no Google Sheets (1-based)
+      }
+    }
+  }
+
+  return 1; // Apenas a linha 1 de cabeçalho está ocupada
 }
 
 // Função para localizar a aba de forma limpa e tolerante
